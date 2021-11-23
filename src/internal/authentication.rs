@@ -1,20 +1,15 @@
 use core::fmt;
-use std::{io::BufRead, str::FromStr};
+use std::str::FromStr;
 
-use anyhow::Result;
-use serde::{Deserialize, Serialize};
-use validator::{Validate, ValidationError};
+use anyhow::{anyhow, Result};
+use serde::Serialize;
 
 /// AuthenticationRequest represents a authentication request
 /// https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest
-#[derive(Debug, Serialize, Deserialize, Validate)]
 struct AuthenticationRequest {
-    #[validate(custom = "validate_scope")]
-    scope: String,
-    #[validate(custom = "validate_response_type")]
-    response_type: String,
+    scope: Scope,
+    response_type: ResponseType,
     client_id: String,
-    #[validate(url)]
     redirect_uri: String,
     state: String,
     // nonce: String,
@@ -30,14 +25,27 @@ struct AuthenticationRequest {
 }
 
 impl AuthenticationRequest {
-    pub fn validate(&self) -> Result<()> {
+    pub fn new(
+        scope: &str,
+        response_type: &str,
+        client_id: &str,
+        redirect_uri: &str,
+        state: &str,
+    ) -> Result<Self> {
         // https://openid.net/specs/openid-connect-core-1_0.html#AuthRequestValidation
         // TODO:
         //  - The Authorization Server MUST validate all the OAuth 2.0 parameters according to the OAuth 2.0 specification.
         //  - Verify that a scope parameter is present and contains the openid scope value. (If no openid scope value is present, the request may still be a valid OAuth 2.0 request, but is not an OpenID Connect request.)
         //  - The Authorization Server MUST verify that all the REQUIRED parameters are present and their usage conforms to this specification.
         //  - If the sub (subject) Claim is requested with a specific value for the ID Token, the Authorization Server MUST only send a positive response if the End-User identified by that sub value has an active session with the Authorization Server or has been Authenticated as a result of the request. The Authorization Server MUST NOT reply with an ID Token or Access Token for a different user, even if they have an active session with the Authorization Server. Such a request can be made either using an id_token_hint parameter or by requesting a specific Claim Value as described in Section 5.5.1, if the claims parameter is supported by the implementation.
-        Ok(())
+
+        Ok(AuthenticationRequest {
+            scope: Scope::from_str(scope)?,
+            response_type: ResponseType::from_str(response_type)?,
+            client_id: client_id.to_string(),
+            redirect_uri: redirect_uri.to_string(),
+            state: state.to_string(),
+        })
     }
 }
 
@@ -49,7 +57,7 @@ enum Scope {
 }
 
 impl FromStr for Scope {
-    type Err = ValidationError;
+    type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
@@ -57,7 +65,7 @@ impl FromStr for Scope {
             "profile" => Ok(Scope::Profile),
             "address" => Ok(Scope::Address),
             "phone" => Ok(Scope::Phone),
-            _ => Err(ValidationError::new("Unsupported scope")),
+            _ => Err(anyhow!("Unsupported scope")),
         }
     }
 }
@@ -67,17 +75,17 @@ enum ResponseType {
 }
 
 impl FromStr for ResponseType {
-    type Err = ValidationError;
+    type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "code" => Ok(ResponseType::Code),
-            _ => Err(ValidationError::new("Unsupported response_type")),
+            _ => Err(anyhow!("Unsupported response_type")),
         }
     }
 }
 
-fn validate_scope(scope: &str) -> Result<(), ValidationError> {
+fn validate_scope(scope: &str) -> Result<()> {
     let mut openid_found = false;
     for s in scope.split_whitespace() {
         match Scope::from_str(s) {
@@ -87,17 +95,17 @@ fn validate_scope(scope: &str) -> Result<(), ValidationError> {
                 }
             }
             Err(e) => {
-                return Err(ValidationError::from(e));
+                return Err(e);
             }
         }
     }
     if !openid_found {
-        return Err(ValidationError::new("scope openid is required"));
+        return Err(anyhow!("scope openid is required"));
     }
     Ok(())
 }
 
-fn validate_response_type(response_type: &str) -> Result<(), ValidationError> {
+fn validate_response_type(response_type: &str) -> Result<()> {
     for s in response_type.split_whitespace() {
         ResponseType::from_str(s)?;
     }
@@ -106,6 +114,7 @@ fn validate_response_type(response_type: &str) -> Result<(), ValidationError> {
 
 /// SuccessfulAuthenticationResponse represents a successful authentication response
 /// https://openid.net/specs/openid-connect-core-1_0.html#AuthResponse
+#[derive(Serialize)]
 struct SuccessfulAuthenticationResponse {
     next: String,
     code: String,
@@ -141,6 +150,16 @@ impl fmt::Display for AuthorizationError {
     }
 }
 
+impl Serialize for AuthorizationError {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+#[derive(Serialize)]
 struct ErrorAuthenticationResponse {
     error: AuthorizationError,
     error_description: String,
@@ -161,15 +180,21 @@ mod tests {
     #[test]
     fn validate_scope_err_openid_notfound() {
         let result = validate_scope("profile address");
-        let expected = Err(ValidationError::new("scope openid is required"));
-        assert_eq!(expected, result);
+        let expected: Result<()> = Err(anyhow!("scope openid is required"));
+        assert_eq!(
+            expected.err().unwrap().to_string(),
+            result.err().unwrap().to_string()
+        );
     }
 
     #[test]
     fn validate_scope_err_unsupported_scope() {
         let result = validate_scope("openid wrongscope");
-        let expected = Err(ValidationError::new("Unsupported scope"));
-        assert_eq!(expected, result);
+        let expected: Result<()> = Err(anyhow!("Unsupported scope"));
+        assert_eq!(
+            expected.err().unwrap().to_string(),
+            result.err().unwrap().to_string()
+        );
     }
 
     #[test]
@@ -181,7 +206,10 @@ mod tests {
     #[test]
     fn validate_response_type_err_unsupported_type() {
         let result = validate_response_type("code hoge");
-        let expected = Err(ValidationError::new("Unsupported response_type"));
-        assert_eq!(expected, result);
+        let expected: Result<()> = Err(anyhow!("Unsupported response_type"));
+        assert_eq!(
+            expected.err().unwrap().to_string(),
+            result.err().unwrap().to_string()
+        );
     }
 }
