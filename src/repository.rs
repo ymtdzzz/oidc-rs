@@ -1,5 +1,5 @@
 use anyhow::Result;
 
-trait Storage {
+pub trait Repository {
     fn save_challenge(challenge: &str) -> Result<()>;
 }

@@ -6,7 +6,7 @@ use serde::Serialize;
 
 /// AuthenticationRequest represents a authentication request
 /// https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest
-struct AuthenticationRequest {
+pub struct AuthenticationRequest {
     scope: Scope,
     response_type: ResponseType,
     client_id: String,
