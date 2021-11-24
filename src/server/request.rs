@@ -11,6 +11,13 @@ pub struct AuthenticationParams {
 pub struct LoginParams {
     pub username: String,
     pub password: String,
+    pub login_challenge: String,
+}
+
+#[derive(FromForm)]
+pub struct ConsentParams {
+    pub consent: String,
+    pub consent_challenge: String,
 }
 
 #[derive(FromForm)]

@@ -1,0 +1,14 @@
+<html>
+  {% if error_msg %}
+    <font color="red">{{ error_msg }}</font>
+  {% endif %}
+  <form action="/authenticate" method="POST">
+    <label for="username">username</label>
+    <input name="username" id="username" value="">
+    <label for="password">password</label>
+    <input name="password" id="password" type="password" value="">
+    <input name="login_challenge" type="hidden" value="{{ login_challenge }}"><br>
+    <p>username: foobar, password: 1234</p>
+    <button type="submit">Login</button>
+  </form>
+</html>
