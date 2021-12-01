@@ -2,3 +2,4 @@
 .DS_Store
 /target
 /coverage
+/docker/mysql

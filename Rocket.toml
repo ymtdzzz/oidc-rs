@@ -1,0 +1,2 @@
+[default.databases]
+oidc_db = { url = "mysql://oidc:oidc@127.0.0.1/oidc" }

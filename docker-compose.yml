@@ -1,0 +1,16 @@
+version: '3'
+
+services:
+  # MySQL
+  mysql:
+    image: mysql:5.7
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: oidc
+      MYSQL_USER: oidc
+      MYSQL_PASSWORD: oidc
+      TZ: 'Asia/Tokyo'
+    volumes:
+      - ./docker/mysql:/var/lib/mysql
+    ports:
+      - 3306:3306

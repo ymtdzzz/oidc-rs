@@ -1,4 +1,12 @@
+use std::env;
+
+use diesel::MysqlConnection;
+use dotenv::dotenv;
 use rocket::{
+    figment::{
+        util::map,
+        value::{Map, Value},
+    },
     form::Form,
     response::{status::BadRequest, Redirect},
 };
@@ -13,6 +21,9 @@ use self::{
 
 mod context;
 mod request;
+
+#[database("oidc_db")]
+pub struct DBPool(MysqlConnection);
 
 #[get("/")]
 fn index() -> &'static str {
@@ -79,6 +90,7 @@ fn get_authorization() -> Template {
 #[post("/authorization", data = "<consentparam>")]
 fn post_authorization(consentparam: Form<ConsentParams>) -> String {
     // TODO: check if param consent_challenge is correct
+    // TODO: generate authorization code
     format!(
         "consent_challenge: {}, consent: {} // TODO: redirect to RP callback including authorization code",
         consentparam.consent_challenge, consentparam.consent
@@ -87,7 +99,16 @@ fn post_authorization(consentparam: Form<ConsentParams>) -> String {
 
 #[launch]
 pub fn run() -> _ {
-    rocket::build()
+    dotenv().ok();
+
+    let db_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+    let db: Map<_, Value> = map! {
+        "url" => db_url.into(),
+        "pool_size" => 10.into(),
+    };
+    let figment = rocket::Config::figment().merge(("databases", map!["oidc_db" => db]));
+
+    rocket::custom(figment)
         .mount(
             "/",
             routes![
@@ -98,5 +119,6 @@ pub fn run() -> _ {
                 post_authorization,
             ],
         )
+        .attach(DBPool::fairing())
         .attach(Template::fairing())
 }
