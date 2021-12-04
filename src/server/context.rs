@@ -10,3 +10,8 @@ pub struct LoginContext {
 pub struct ConsentContext {
     pub consent_challenge: String,
 }
+
+#[derive(Serialize)]
+pub struct ErrorContext {
+    pub error_msg: String,
+}

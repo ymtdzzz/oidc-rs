@@ -1,38 +1,45 @@
-use std::env;
-
+use diesel::result::Error;
 use diesel::MysqlConnection;
-use dotenv::dotenv;
 use rocket::{
     figment::{
         util::map,
         value::{Map, Value},
     },
     form::Form,
-    response::{status::BadRequest, Redirect},
+    http::CookieJar,
+    response::status::BadRequest,
 };
 use rocket_dyn_templates::Template;
 
-use crate::internal::authentication::AuthenticationRequest;
+use crate::{
+    internal::authentication::AuthenticationRequest,
+    models::{AuthChallenge, AuthCode, Session},
+    repository::{self, create_auth_code, create_session, find_auth_challenge, find_session},
+    utils::generate_challenge,
+};
 
 use self::{
-    context::{ConsentContext, LoginContext},
-    request::{AuthenticationParams, ConsentParams, LoginParams},
+    context::{ConsentContext, ErrorContext, LoginContext},
+    request::{AuthenticationParams, ConsentGetParams, ConsentParams, LoginParams},
+    response::RedirectWithCookie,
 };
 
 mod context;
 mod request;
+mod response;
 
 #[database("oidc_db")]
 pub struct DBPool(MysqlConnection);
 
 #[get("/")]
-fn index() -> &'static str {
+async fn index() -> &'static str {
     "Hello, world!"
 }
 
 #[get("/authenticate?<authparam..>")]
-fn get_authenticate(
+async fn get_authenticate(
     authparam: Option<AuthenticationParams>,
+    conn: DBPool,
 ) -> Result<Template, BadRequest<String>> {
     match authparam {
         Some(param) => {
@@ -44,8 +51,19 @@ fn get_authenticate(
                 &param.state,
             )
             .map_err(|e| BadRequest(Some("Request is malformed: ".to_owned() + &e.to_string())))?;
-            // TODO: save challenge and pass it to hidden value
-            let challenge = "login_challenge".to_string();
+            let challenge = conn
+                .run(move |c| -> Result<String, Error> {
+                    let challenge = generate_challenge();
+                    repository::create_auth_challenge(
+                        AuthChallenge {
+                            challenge: challenge.clone(),
+                        },
+                        c,
+                    )?;
+                    Ok(challenge)
+                })
+                .await
+                .unwrap();
             Ok(Template::render(
                 "login",
                 &LoginContext {
@@ -59,51 +77,163 @@ fn get_authenticate(
 }
 
 #[post("/authenticate", data = "<loginparam>")]
-fn post_authenticate(loginparam: Form<LoginParams>) -> Result<Redirect, Template> {
-    // dummy authentication
-    if loginparam.username == "foobar".to_string() && loginparam.password == "1234" {
-        return Ok(Redirect::to("/authorization"));
-    }
-    // TODO: check if param login_challenge is correct
-    Err(Template::render(
-        "login",
-        &LoginContext {
-            error_msg: Some(String::from("username or password incorrect")),
-            login_challenge: loginparam.login_challenge.to_string(),
-        },
-    ))
+async fn post_authenticate(
+    loginparam: Form<LoginParams>,
+    conn: DBPool,
+) -> Result<RedirectWithCookie, Template> {
+    conn.run(move |c| {
+        if find_auth_challenge(&loginparam.login_challenge, c).is_err() {
+            return Err(Template::render(
+                "error",
+                &ErrorContext {
+                    error_msg: String::from("Challenge is incorrect."),
+                },
+            ));
+        }
+        if loginparam.username == "foobar".to_string() && loginparam.password == "1234" {
+            let session_id = generate_challenge();
+            // TODO: error handling
+            create_session(
+                Session {
+                    session_id: session_id.clone(),
+                },
+                c,
+            )
+            .expect("failed to store the session_id");
+            Ok(RedirectWithCookie {
+                key: String::from("session_id"),
+                value: session_id,
+                next: format!(
+                    "/authorization?consent_challenge={}",
+                    &loginparam.login_challenge
+                ),
+            })
+        } else {
+            Err(Template::render(
+                "login",
+                &LoginContext {
+                    error_msg: Some(String::from("username or password is incorrect")),
+                    login_challenge: loginparam.login_challenge.to_string(),
+                },
+            ))
+        }
+    })
+    .await
 }
 
-#[get("/authorization")]
-fn get_authorization() -> Template {
-    // TODO: login check
-    // TODO: save challenge and pass it to hidden value
-    let challenge = "consent_challenge".to_string();
-    Template::render(
-        "consent",
-        &ConsentContext {
-            consent_challenge: challenge,
-        },
-    )
+#[get("/authorization?<consentgetparam..>")]
+async fn get_authorization<'a>(
+    consentgetparam: Option<ConsentGetParams>,
+    jar: &'a CookieJar<'_>,
+    conn: DBPool,
+) -> Template {
+    let mut session_id: Option<String> = None;
+    if let Some(session) = jar.get("session_id") {
+        session_id = Some(session.value().to_string());
+    }
+    conn.run(move |c| {
+        let mut is_session_error = false;
+        // login check
+        if let Some(id) = session_id {
+            if find_session(&id, c).is_err() {
+                is_session_error = true;
+            }
+        } else {
+            is_session_error = true;
+        }
+        if is_session_error {
+            return Template::render(
+                "error",
+                &ErrorContext {
+                    error_msg: String::from(
+                        "Session doesn't exist or is invalid. Please retry from login page.",
+                    ),
+                },
+            );
+        }
+        // challenge check
+        match consentgetparam {
+            Some(param) => {
+                if find_auth_challenge(&param.consent_challenge, c).is_err() {
+                    return Template::render(
+                        "error",
+                        &ErrorContext {
+                            error_msg: String::from("Challenge is incorrect."),
+                        },
+                    );
+                }
+                Template::render(
+                    "consent",
+                    &ConsentContext {
+                        consent_challenge: param.consent_challenge,
+                    },
+                )
+            }
+            None => Template::render(
+                "error",
+                &ErrorContext {
+                    error_msg: String::from("Challenge is incorrect."),
+                },
+            ),
+        }
+    })
+    .await
 }
 
 #[post("/authorization", data = "<consentparam>")]
-fn post_authorization(consentparam: Form<ConsentParams>) -> String {
-    // TODO: check if param consent_challenge is correct
-    // TODO: generate authorization code
-    format!(
-        "consent_challenge: {}, consent: {} // TODO: redirect to RP callback including authorization code",
-        consentparam.consent_challenge, consentparam.consent
-    )
+async fn post_authorization<'a>(
+    consentparam: Form<ConsentParams>,
+    jar: &'a CookieJar<'_>,
+    conn: DBPool,
+) -> Result<String, Template> {
+    let mut session_id: Option<String> = None;
+    if let Some(session) = jar.get("session_id") {
+        session_id = Some(session.value().to_string());
+    }
+    conn.run(move |c| {
+        let mut is_session_error = false;
+        // login check
+        if let Some(id) = session_id {
+            if find_session(&id, c).is_err() {
+                is_session_error = false;
+            }
+        } else {
+            is_session_error = false;
+        }
+        if is_session_error {
+            return Err(Template::render(
+                "error",
+                &ErrorContext {
+                    error_msg: String::from(
+                        "Session doesn't exist or is invalid. Please retry from login page.",
+                    ),
+                },
+            ));
+        }
+        // challenge check
+        if find_auth_challenge(&consentparam.consent_challenge, c).is_err() {
+            return Err(Template::render(
+                "error",
+                &ErrorContext {
+                    error_msg: String::from("Challenge is incorrect."),
+                },
+            ));
+        }
+        // TODO: error handling
+        let auth_code = generate_challenge();
+        create_auth_code(AuthCode {
+            code: auth_code.clone(),
+        }, c).expect("failed to store the auth_code");
+        Ok(format!(
+            "consent_challenge: {}, consent: {}, auth_code: {} // TODO: redirect to RP callback including authorization code",
+            consentparam.consent_challenge, consentparam.consent, auth_code
+        ))
+    }).await
 }
 
 #[launch]
 pub fn run() -> _ {
-    dotenv().ok();
-
-    let db_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     let db: Map<_, Value> = map! {
-        "url" => db_url.into(),
         "pool_size" => 10.into(),
     };
     let figment = rocket::Config::figment().merge(("databases", map!["oidc_db" => db]));
