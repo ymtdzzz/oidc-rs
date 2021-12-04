@@ -1,8 +1,18 @@
 use diesel::QueryDsl;
 use diesel::{query_dsl::RunQueryDsl, MysqlConnection, QueryResult};
 
-use crate::models::{AuthChallenge, AuthCode, Session};
+use crate::models::{AuthChallenge, AuthCode, Client, Session};
 use crate::schema::*;
+
+pub fn create_client(new_client: Client, conn: &MysqlConnection) -> QueryResult<usize> {
+    diesel::insert_into(client::table)
+        .values(&new_client)
+        .execute(conn)
+}
+
+pub fn find_client(client_id: &str, conn: &MysqlConnection) -> QueryResult<Client> {
+    client::table.find(client_id).first(conn)
+}
 
 pub fn create_auth_challenge(
     new_auth_challenge: AuthChallenge,
@@ -27,7 +37,7 @@ pub fn create_session(new_session: Session, conn: &MysqlConnection) -> QueryResu
         .execute(conn)
 }
 
-pub fn find_session(session_id: &str, conn: &MysqlConnection) -> QueryResult<AuthChallenge> {
+pub fn find_session(session_id: &str, conn: &MysqlConnection) -> QueryResult<Session> {
     session::table.find(session_id).first(conn)
 }
 
@@ -41,7 +51,7 @@ pub fn create_auth_code(new_auth_code: AuthCode, conn: &MysqlConnection) -> Quer
         .execute(conn)
 }
 
-pub fn find_auth_code(code: &str, conn: &MysqlConnection) -> QueryResult<AuthChallenge> {
+pub fn find_auth_code(code: &str, conn: &MysqlConnection) -> QueryResult<AuthCode> {
     auth_code::table.find(code).first(conn)
 }
 

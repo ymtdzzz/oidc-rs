@@ -1,3 +1,5 @@
+use std::convert::TryInto;
+
 use diesel::result::Error;
 use diesel::MysqlConnection;
 use rocket::{
@@ -13,14 +15,16 @@ use rocket_dyn_templates::Template;
 
 use crate::{
     internal::authentication::AuthenticationRequest,
-    models::{AuthChallenge, AuthCode, Session},
-    repository::{self, create_auth_code, create_session, find_auth_challenge, find_session},
+    models::{AuthChallenge, AuthCode, Client, Session},
+    repository::{
+        self, create_auth_code, create_client, create_session, find_auth_challenge, find_session,
+    },
     utils::generate_challenge,
 };
 
 use self::{
     context::{ConsentContext, ErrorContext, LoginContext},
-    request::{AuthenticationParams, ConsentGetParams, ConsentParams, LoginParams},
+    request::{AuthenticationParams, ClientParams, ConsentGetParams, ConsentParams, LoginParams},
     response::RedirectWithCookie,
 };
 
@@ -36,6 +40,31 @@ async fn index() -> &'static str {
     "Hello, world!"
 }
 
+#[get("/client?<clientparam..>")]
+async fn get_client(
+    clientparam: Option<ClientParams>,
+    conn: DBPool,
+) -> Result<String, BadRequest<String>> {
+    conn.run(move |c| match clientparam {
+        Some(param) => {
+            let client_id = generate_challenge();
+            create_client(
+                Client {
+                    client_id: client_id.clone(),
+                    scope: param.scope,
+                    response_type: param.response_type,
+                    redirect_uri: param.redirect_uri,
+                },
+                c,
+            )
+            .expect("failed to store the client");
+            Ok(format!("client_id: {}", client_id))
+        }
+        None => Err(BadRequest(Some("Request is malformed".to_string()))),
+    })
+    .await
+}
+
 #[get("/authenticate?<authparam..>")]
 async fn get_authenticate(
     authparam: Option<AuthenticationParams>,
@@ -43,34 +72,31 @@ async fn get_authenticate(
 ) -> Result<Template, BadRequest<String>> {
     match authparam {
         Some(param) => {
-            let _auth_req = AuthenticationRequest::new(
-                &param.scope,
-                &param.response_type,
-                &param.client_id,
-                &param.redirect_uri,
-                &param.state,
-            )
-            .map_err(|e| BadRequest(Some("Request is malformed: ".to_owned() + &e.to_string())))?;
-            let challenge = conn
-                .run(move |c| -> Result<String, Error> {
-                    let challenge = generate_challenge();
-                    repository::create_auth_challenge(
-                        AuthChallenge {
-                            challenge: challenge.clone(),
-                        },
-                        c,
-                    )?;
-                    Ok(challenge)
-                })
-                .await
-                .unwrap();
-            Ok(Template::render(
-                "login",
-                &LoginContext {
-                    error_msg: None,
-                    login_challenge: challenge,
-                },
-            ))
+            conn.run(move |c| {
+                let client = repository::find_client(&param.client_id, c).expect("failed to get the client");
+                let auth_req = AuthenticationRequest::new(
+                    &param.scope,
+                    &param.response_type,
+                    &param.client_id,
+                    &param.redirect_uri,
+                    param.state,
+                    Some(&client.try_into().unwrap()),
+                ).expect("Request is malformed");
+                let challenge = generate_challenge();
+                repository::create_auth_challenge(
+                    AuthChallenge::from_auth_request(&challenge, auth_req).expect("failed to convert from the AuthenticationRequest into the model AuthChallenge"),
+                    c,
+                )
+                .expect("failed to store the challenge");
+                Ok(Template::render(
+                    "login",
+                    &LoginContext {
+                        error_msg: None,
+                        login_challenge: challenge,
+                    },
+                ))
+            })
+            .await
         }
         None => Err(BadRequest(Some("Request is malformed".to_string()))),
     }
@@ -243,6 +269,7 @@ pub fn run() -> _ {
             "/",
             routes![
                 index,
+                get_client,
                 get_authenticate,
                 post_authenticate,
                 get_authorization,

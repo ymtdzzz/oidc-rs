@@ -7,12 +7,19 @@ use rocket::{
 };
 
 #[derive(FromForm)]
+pub struct ClientParams {
+    pub scope: String,
+    pub response_type: String,
+    pub redirect_uri: String,
+}
+
+#[derive(FromForm)]
 pub struct AuthenticationParams {
     pub scope: String,
     pub response_type: String,
     pub client_id: String,
     pub redirect_uri: String,
-    pub state: String,
+    pub state: Option<String>,
 }
 
 #[derive(FromForm)]
