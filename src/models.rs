@@ -1,10 +1,11 @@
 use std::convert::TryInto;
 
 use crate::{
+    error::CustomError,
     internal::{authentication::AuthenticationRequest, client::Client as OIDCClient},
     schema::*,
 };
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 #[derive(Queryable, Insertable, AsChangeset, Serialize, Deserialize)]
@@ -18,11 +19,11 @@ pub struct Client {
 }
 
 impl TryInto<OIDCClient> for Client {
-    type Error = anyhow::Error;
+    type Error = CustomError;
 
     fn try_into(self) -> Result<OIDCClient, Self::Error> {
         OIDCClient::new(&self.scope, &self.response_type, &self.redirect_uri)
-            .map_err(|e| anyhow!(e))
+            .map_err(|_e| CustomError::BadRequest)
     }
 }
 

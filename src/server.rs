@@ -1,7 +1,6 @@
 use std::convert::TryInto;
 
 use chrono::{Duration, Utc};
-use diesel::result::Error;
 use diesel::MysqlConnection;
 use rocket::{
     figment::{
@@ -10,17 +9,17 @@ use rocket::{
     },
     form::Form,
     http::CookieJar,
-    response::{status::BadRequest, Redirect},
     serde::json::Json,
 };
 use rocket_dyn_templates::Template;
 
 use crate::{
+    error::CustomError,
     internal::{
         authentication::AuthenticationRequest,
         token::{IdToken, SuccessfulTokenResponse},
     },
-    models::{AuthChallenge, AuthCode, Client, NewToken, Session, Token},
+    models::{AuthChallenge, AuthCode, Client, NewToken, Session},
     repository::{
         self, create_auth_code, create_client, create_session, find_auth_challenge, find_session,
     },
@@ -36,7 +35,7 @@ use self::{
     response::RedirectWithCookie,
 };
 
-mod context;
+pub mod context;
 mod request;
 mod response;
 
@@ -52,7 +51,7 @@ async fn index() -> &'static str {
 async fn get_client(
     clientparam: Option<ClientParams>,
     conn: DBPool,
-) -> Result<String, BadRequest<String>> {
+) -> Result<String, CustomError> {
     conn.run(move |c| match clientparam {
         Some(param) => {
             let client_id = generate_challenge();
@@ -66,14 +65,13 @@ async fn get_client(
                     redirect_uri: param.redirect_uri,
                 },
                 c,
-            )
-            .expect("failed to store the client");
+            )?;
             Ok(format!(
                 "client_id: {}, client_secret: {}",
                 client_id, client_secret
             ))
         }
-        None => Err(BadRequest(Some("Request is malformed".to_string()))),
+        None => Err(CustomError::BadRequest),
     })
     .await
 }
@@ -82,25 +80,24 @@ async fn get_client(
 async fn get_authenticate(
     authparam: Option<AuthenticationParams>,
     conn: DBPool,
-) -> Result<Template, BadRequest<String>> {
+) -> Result<Template, CustomError> {
     match authparam {
         Some(param) => {
             conn.run(move |c| {
-                let client = repository::find_client(&param.client_id, c).expect("failed to get the client");
+                let client = repository::find_client(&param.client_id, c)?;
                 let auth_req = AuthenticationRequest::new(
                     &param.scope,
                     &param.response_type,
                     &param.client_id,
                     &param.redirect_uri,
                     param.state,
-                    Some(&client.try_into().unwrap()),
-                ).expect("Request is malformed");
+                    Some(&client.try_into()?),
+                ).map_err(|_e| CustomError::BadRequest)?;
                 let challenge = generate_challenge();
                 repository::create_auth_challenge(
                     AuthChallenge::from_auth_request(&challenge, auth_req).expect("failed to convert from the AuthenticationRequest into the model AuthChallenge"),
                     c,
-                )
-                .expect("failed to store the challenge");
+                )?;
                 Ok(Template::render(
                     "login",
                     &LoginContext {
@@ -111,7 +108,7 @@ async fn get_authenticate(
             })
             .await
         }
-        None => Err(BadRequest(Some("Request is malformed".to_string()))),
+        None => Err(CustomError::BadRequest),
     }
 }
 
@@ -119,26 +116,24 @@ async fn get_authenticate(
 async fn post_authenticate(
     loginparam: Form<LoginParams>,
     conn: DBPool,
-) -> Result<RedirectWithCookie, Template> {
+) -> Result<RedirectWithCookie, CustomError> {
     conn.run(move |c| {
         if find_auth_challenge(&loginparam.login_challenge, c).is_err() {
-            return Err(Template::render(
+            return Err(CustomError::ValidationError(Template::render(
                 "error",
                 &ErrorContext {
                     error_msg: String::from("Challenge is incorrect."),
                 },
-            ));
+            )));
         }
         if loginparam.username == "foobar".to_string() && loginparam.password == "1234" {
             let session_id = generate_challenge();
-            // TODO: error handling
             create_session(
                 Session {
                     session_id: session_id.clone(),
                 },
                 c,
-            )
-            .expect("failed to store the session_id");
+            )?;
             Ok(RedirectWithCookie {
                 key: String::from("session_id"),
                 value: session_id,
@@ -148,13 +143,13 @@ async fn post_authenticate(
                 ),
             })
         } else {
-            Err(Template::render(
+            Err(CustomError::ValidationError(Template::render(
                 "login",
                 &LoginContext {
                     error_msg: Some(String::from("username or password is incorrect")),
                     login_challenge: loginparam.login_challenge.to_string(),
                 },
-            ))
+            )))
         }
     })
     .await
@@ -165,7 +160,7 @@ async fn get_authorization<'a>(
     consentgetparam: Option<ConsentGetParams>,
     jar: &'a CookieJar<'_>,
     conn: DBPool,
-) -> Template {
+) -> Result<Template, CustomError> {
     let mut session_id: Option<String> = None;
     if let Some(session) = jar.get("session_id") {
         session_id = Some(session.value().to_string());
@@ -181,39 +176,22 @@ async fn get_authorization<'a>(
             is_session_error = true;
         }
         if is_session_error {
-            return Template::render(
-                "error",
-                &ErrorContext {
-                    error_msg: String::from(
-                        "Session doesn't exist or is invalid. Please retry from login page.",
-                    ),
-                },
-            );
+            return Err(CustomError::SessionError);
         }
         // challenge check
         match consentgetparam {
             Some(param) => {
                 if find_auth_challenge(&param.consent_challenge, c).is_err() {
-                    return Template::render(
-                        "error",
-                        &ErrorContext {
-                            error_msg: String::from("Challenge is incorrect."),
-                        },
-                    );
+                    return Err(CustomError::ChallengeError);
                 }
-                Template::render(
+                Ok(Template::render(
                     "consent",
                     &ConsentContext {
                         consent_challenge: param.consent_challenge,
                     },
-                )
+                ))
             }
-            None => Template::render(
-                "error",
-                &ErrorContext {
-                    error_msg: String::from("Challenge is incorrect."),
-                },
-            ),
+            None => Err(CustomError::BadRequest),
         }
     })
     .await
@@ -224,7 +202,7 @@ async fn post_authorization<'a>(
     consentparam: Form<ConsentParams>,
     jar: &'a CookieJar<'_>,
     conn: DBPool,
-) -> Result<String, Template> {
+) -> Result<String, CustomError> {
     let mut session_id: Option<String> = None;
     if let Some(session) = jar.get("session_id") {
         session_id = Some(session.value().to_string());
@@ -240,29 +218,16 @@ async fn post_authorization<'a>(
             is_session_error = false;
         }
         if is_session_error {
-            return Err(Template::render(
-                "error",
-                &ErrorContext {
-                    error_msg: String::from(
-                        "Session doesn't exist or is invalid. Please retry from login page.",
-                    ),
-                },
-            ));
+            return Err(CustomError::SessionError);
         }
         // challenge check
         if find_auth_challenge(&consentparam.consent_challenge, c).is_err() {
-            return Err(Template::render(
-                "error",
-                &ErrorContext {
-                    error_msg: String::from("Challenge is incorrect."),
-                },
-            ));
+            return Err(CustomError::ChallengeError);
         }
-        // TODO: error handling
         let auth_code = generate_challenge();
         create_auth_code(AuthCode {
             code: auth_code.clone(),
-        }, c).expect("failed to store the auth_code");
+        }, c)?;
         Ok(format!(
             "consent_challenge: {}, consent: {}, auth_code: {} // TODO: redirect to RP callback including authorization code",
             consentparam.consent_challenge, consentparam.consent, auth_code
@@ -274,17 +239,17 @@ async fn post_authorization<'a>(
 async fn post_token(
     tokenparam: Form<TokenParams>,
     conn: DBPool,
-) -> Result<Json<SuccessfulTokenResponse>, BadRequest<String>> {
+) -> Result<Json<SuccessfulTokenResponse>, CustomError> {
     conn.run(move |c| {
         let client =
             repository::find_client(&tokenparam.client_id, c).expect("failed to find the client");
         // check client credential
         if client.client_secret != tokenparam.client_secret {
-            return Err(BadRequest(Some("client credential is invalid".to_string())));
+            return Err(CustomError::BadRequest);
         }
         // check auth code
         if repository::find_auth_code(&tokenparam.code, c).is_err() {
-            return Err(BadRequest(Some("auth code is invalid".to_string())));
+            return Err(CustomError::BadRequest);
         }
         let access_token = generate_challenge();
         repository::create_token(
@@ -292,13 +257,12 @@ async fn post_token(
                 access_token: access_token.clone(),
             },
             c,
-        )
-        .expect("failed to store the token");
+        )?;
         let now = Utc::now();
         let exp = now + Duration::hours(12);
         let claim = IdToken {
             iss: "http://localhost:5000".to_string(),
-            sub: "userid".to_string(),
+            sub: "userid".to_string(), // dummy id
             aud: tokenparam.client_id.to_string(),
             exp: exp.timestamp() as usize,
             iat: now.timestamp() as usize,
@@ -308,8 +272,7 @@ async fn post_token(
             &jsonwebtoken::Header::default(),
             &claim,
             &jsonwebtoken::EncodingKey::from_base64_secret("c2VjcmV0a2V5").unwrap(),
-        )
-        .expect("failed to generate id token");
+        )?;
         Ok(Json(SuccessfulTokenResponse {
             access_token,
             token_type: "Bearer".to_string(),
