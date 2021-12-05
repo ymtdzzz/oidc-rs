@@ -1,5 +1,6 @@
 use std::convert::TryInto;
 
+use chrono::{Duration, Utc};
 use diesel::result::Error;
 use diesel::MysqlConnection;
 use rocket::{
@@ -9,13 +10,17 @@ use rocket::{
     },
     form::Form,
     http::CookieJar,
-    response::status::BadRequest,
+    response::{status::BadRequest, Redirect},
+    serde::json::Json,
 };
 use rocket_dyn_templates::Template;
 
 use crate::{
-    internal::authentication::AuthenticationRequest,
-    models::{AuthChallenge, AuthCode, Client, Session},
+    internal::{
+        authentication::AuthenticationRequest,
+        token::{IdToken, SuccessfulTokenResponse},
+    },
+    models::{AuthChallenge, AuthCode, Client, NewToken, Session, Token},
     repository::{
         self, create_auth_code, create_client, create_session, find_auth_challenge, find_session,
     },
@@ -24,7 +29,10 @@ use crate::{
 
 use self::{
     context::{ConsentContext, ErrorContext, LoginContext},
-    request::{AuthenticationParams, ClientParams, ConsentGetParams, ConsentParams, LoginParams},
+    request::{
+        AuthenticationParams, ClientParams, ConsentGetParams, ConsentParams, LoginParams,
+        TokenParams,
+    },
     response::RedirectWithCookie,
 };
 
@@ -48,9 +56,11 @@ async fn get_client(
     conn.run(move |c| match clientparam {
         Some(param) => {
             let client_id = generate_challenge();
+            let client_secret = generate_challenge();
             create_client(
                 Client {
                     client_id: client_id.clone(),
+                    client_secret: client_secret.clone(),
                     scope: param.scope,
                     response_type: param.response_type,
                     redirect_uri: param.redirect_uri,
@@ -58,7 +68,10 @@ async fn get_client(
                 c,
             )
             .expect("failed to store the client");
-            Ok(format!("client_id: {}", client_id))
+            Ok(format!(
+                "client_id: {}, client_secret: {}",
+                client_id, client_secret
+            ))
         }
         None => Err(BadRequest(Some("Request is malformed".to_string()))),
     })
@@ -257,6 +270,57 @@ async fn post_authorization<'a>(
     }).await
 }
 
+#[post("/token", data = "<tokenparam>")]
+async fn post_token(
+    tokenparam: Form<TokenParams>,
+    conn: DBPool,
+) -> Result<Json<SuccessfulTokenResponse>, BadRequest<String>> {
+    conn.run(move |c| {
+        let client =
+            repository::find_client(&tokenparam.client_id, c).expect("failed to find the client");
+        // check client credential
+        if client.client_secret != tokenparam.client_secret {
+            return Err(BadRequest(Some("client credential is invalid".to_string())));
+        }
+        // check auth code
+        if repository::find_auth_code(&tokenparam.code, c).is_err() {
+            return Err(BadRequest(Some("auth code is invalid".to_string())));
+        }
+        let access_token = generate_challenge();
+        repository::create_token(
+            NewToken {
+                access_token: access_token.clone(),
+            },
+            c,
+        )
+        .expect("failed to store the token");
+        let now = Utc::now();
+        let exp = now + Duration::hours(12);
+        let claim = IdToken {
+            iss: "http://localhost:5000".to_string(),
+            sub: "userid".to_string(),
+            aud: tokenparam.client_id.to_string(),
+            exp: exp.timestamp() as usize,
+            iat: now.timestamp() as usize,
+            nonce: "nonce".to_string(), // TODO: set nonce
+        };
+        let id_token = jsonwebtoken::encode(
+            &jsonwebtoken::Header::default(),
+            &claim,
+            &jsonwebtoken::EncodingKey::from_base64_secret("c2VjcmV0a2V5").unwrap(),
+        )
+        .expect("failed to generate id token");
+        Ok(Json(SuccessfulTokenResponse {
+            access_token,
+            token_type: "Bearer".to_string(),
+            refresh_token: None,
+            expires_in: 3600,
+            id_token,
+        }))
+    })
+    .await
+}
+
 #[launch]
 pub fn run() -> _ {
     let db: Map<_, Value> = map! {
@@ -274,6 +338,7 @@ pub fn run() -> _ {
                 post_authenticate,
                 get_authorization,
                 post_authorization,
+                post_token,
             ],
         )
         .attach(DBPool::fairing())

@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use anyhow::{anyhow, Result};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 struct TokenRequest {
     grant_type: GrantType,
@@ -56,17 +56,27 @@ fn validate_grant_type(grant_type: &str) -> Result<()> {
 }
 
 #[derive(Serialize)]
-struct SuccessfulTokenResponse {
-    access_token: String,
-    token_type: String,
-    refresh_token: String,
-    expires_in: u64,
-    id_token: String,
+pub struct SuccessfulTokenResponse {
+    pub access_token: String,
+    pub token_type: String,
+    pub refresh_token: Option<String>,
+    pub expires_in: u64,
+    pub id_token: String,
 }
 
 #[derive(Serialize)]
 struct ErrorTokenResponse {
     error: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct IdToken {
+    pub iss: String,
+    pub sub: String,
+    pub aud: String,
+    pub exp: usize,
+    pub iat: usize,
+    pub nonce: String,
 }
 
 #[cfg(test)]

@@ -1,7 +1,7 @@
 use diesel::QueryDsl;
 use diesel::{query_dsl::RunQueryDsl, MysqlConnection, QueryResult};
 
-use crate::models::{AuthChallenge, AuthCode, Client, Session};
+use crate::models::{AuthChallenge, AuthCode, Client, NewToken, Session, Token};
 use crate::schema::*;
 
 pub fn create_client(new_client: Client, conn: &MysqlConnection) -> QueryResult<usize> {
@@ -57,4 +57,18 @@ pub fn find_auth_code(code: &str, conn: &MysqlConnection) -> QueryResult<AuthCod
 
 pub fn delete_auth_code(code: String, conn: &MysqlConnection) -> QueryResult<usize> {
     diesel::delete(auth_code::table.find(code)).execute(conn)
+}
+
+pub fn create_token(new_token: NewToken, conn: &MysqlConnection) -> QueryResult<usize> {
+    diesel::insert_into(tokens::table)
+        .values(&new_token)
+        .execute(conn)
+}
+
+pub fn find_token(token: &str, conn: &MysqlConnection) -> QueryResult<Token> {
+    tokens::table.find(token).first(conn)
+}
+
+pub fn delete_token(auth_code: String, conn: &MysqlConnection) -> QueryResult<usize> {
+    diesel::delete(tokens::table.find(auth_code)).execute(conn)
 }

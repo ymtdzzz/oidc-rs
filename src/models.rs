@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 #[table_name = "client"]
 pub struct Client {
     pub client_id: String,
+    pub client_secret: String,
     pub scope: String,
     pub response_type: String,
     pub redirect_uri: String,
@@ -72,4 +73,16 @@ pub struct Session {
 #[table_name = "auth_code"]
 pub struct AuthCode {
     pub code: String,
+}
+
+#[derive(Queryable)]
+pub struct Token {
+    pub access_token: String,
+    pub created_at: chrono::NaiveDateTime,
+}
+
+#[derive(Queryable, Insertable, AsChangeset)]
+#[table_name = "tokens"]
+pub struct NewToken {
+    pub access_token: String,
 }

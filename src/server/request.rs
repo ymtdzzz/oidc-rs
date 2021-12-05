@@ -60,8 +60,9 @@ impl<'r> FromRequest<'r> for ConsentParams {
 
 #[derive(FromForm)]
 pub struct TokenParams {
-    grant_type: String,
-    code: String,
-    redirect_uri: String,
-    client_id: String,
+    pub grant_type: String,
+    pub code: String,
+    pub redirect_uri: String,
+    pub client_id: String,
+    pub client_secret: String,
 }
