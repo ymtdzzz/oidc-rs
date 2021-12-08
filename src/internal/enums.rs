@@ -1,6 +1,7 @@
 use std::{iter::FromIterator, str::FromStr};
 
 use anyhow::{anyhow, Result};
+use rocket::form::{self, DataField, Errors, FromFormField, ValueField};
 
 pub struct Scopes {
     scopes: Vec<Scope>,
@@ -33,6 +34,28 @@ impl ToString for Scopes {
             .map(|s| s.to_string())
             .collect::<Vec<String>>()
             .join(" ")
+    }
+}
+
+#[async_trait]
+impl<'r> FromFormField<'r> for Scopes {
+    fn from_value(field: ValueField<'r>) -> form::Result<'r, Self> {
+        Self::from_str(field.value)
+            .map_err(|e| Errors::from(form::Error::validation(format!("invalid scope: {}", e))))
+    }
+
+    async fn from_data(field: DataField<'r, '_>) -> form::Result<'r, Self> {
+        let scopes = field
+            .request
+            .query_value::<Vec<&str>>("scope")
+            .ok_or(Errors::from(form::Error::validation("invalid scope")))??;
+        Ok(scopes
+            .iter()
+            .map(|s| Scope::from_str(s))
+            .collect::<Result<Vec<Scope>>>()
+            .map_err(|e| Errors::from(form::Error::validation(format!("invalid scope: {}", e))))?
+            .into_iter()
+            .collect::<Scopes>())
     }
 }
 
@@ -99,6 +122,33 @@ impl FromIterator<ResponseType> for ResponseTypes {
             res_types.types.push(res_type)
         }
         res_types
+    }
+}
+
+#[async_trait]
+impl<'r> FromFormField<'r> for ResponseTypes {
+    fn from_value(field: ValueField<'r>) -> form::Result<'r, Self> {
+        Self::from_str(field.value)
+            .map_err(|e| Errors::from(form::Error::validation(format!("invalid scope: {}", e))))
+    }
+
+    async fn from_data(field: DataField<'r, '_>) -> form::Result<'r, Self> {
+        let scopes = field
+            .request
+            .query_value::<Vec<&str>>("response_type")
+            .ok_or(Errors::from(form::Error::validation("invalid scope")))??;
+        Ok(scopes
+            .iter()
+            .map(|s| ResponseType::from_str(s))
+            .collect::<Result<Vec<ResponseType>>>()
+            .map_err(|e| {
+                Errors::from(form::Error::validation(format!(
+                    "invalid response_type: {}",
+                    e
+                )))
+            })?
+            .into_iter()
+            .collect::<ResponseTypes>())
     }
 }
 

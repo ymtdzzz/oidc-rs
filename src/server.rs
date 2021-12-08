@@ -29,10 +29,7 @@ use crate::{
 
 use self::{
     context::{ConsentContext, ErrorContext, LoginContext},
-    request::{
-        AuthenticationParams, ClientParams, ConsentGetParams, ConsentParams, LoginParams,
-        TokenParams,
-    },
+    request::{ClientParams, ConsentGetParams, ConsentParams, LoginParams, TokenParams},
     response::RedirectWithCookie,
 };
 
@@ -79,38 +76,27 @@ async fn get_client(
 
 #[get("/authenticate?<authparam..>")]
 async fn get_authenticate(
-    authparam: Option<AuthenticationParams>,
+    authparam: AuthenticationRequest,
     conn: DBPool,
 ) -> Result<Template, CustomError> {
-    match authparam {
-        Some(param) => {
-            conn.run(move |c| {
-                let client = repository::find_client(&param.client_id, c)?;
-                let auth_req = AuthenticationRequest::new(
-                    &param.scope,
-                    &param.response_type,
-                    &param.client_id,
-                    &param.redirect_uri,
-                    param.state,
-                    Some(&client.try_into()?),
-                ).map_err(|_e| CustomError::BadRequest)?;
-                let challenge = generate_challenge();
-                repository::create_auth_challenge(
-                    AuthChallenge::from_auth_request(&challenge, auth_req).expect("failed to convert from the AuthenticationRequest into the model AuthChallenge"),
-                    c,
-                )?;
-                Ok(Template::render(
-                    "login",
-                    &LoginContext {
-                        error_msg: None,
-                        login_challenge: challenge,
-                    },
-                ))
-            })
-            .await
-        }
-        None => Err(CustomError::BadRequest),
-    }
+    conn.run(move |c| {
+        repository::find_client(&authparam.client_id(), c)?;
+        let challenge = generate_challenge();
+        repository::create_auth_challenge(
+            AuthChallenge::from_auth_request(&challenge, authparam).expect(
+                "failed to convert from the AuthenticationRequest into the model AuthChallenge",
+            ),
+            c,
+        )?;
+        Ok(Template::render(
+            "login",
+            &LoginContext {
+                error_msg: None,
+                login_challenge: challenge,
+            },
+        ))
+    })
+    .await
 }
 
 #[post("/authenticate", data = "<loginparam>")]

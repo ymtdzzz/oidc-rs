@@ -14,15 +14,6 @@ pub struct ClientParams {
 }
 
 #[derive(FromForm)]
-pub struct AuthenticationParams {
-    pub scope: String,
-    pub response_type: String,
-    pub client_id: String,
-    pub redirect_uri: String,
-    pub state: Option<String>,
-}
-
-#[derive(FromForm)]
 pub struct LoginParams {
     pub username: String,
     pub password: String,
