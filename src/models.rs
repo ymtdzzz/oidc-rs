@@ -6,6 +6,7 @@ use crate::{
     schema::*,
 };
 use anyhow::Result;
+use chrono::{Duration, Utc};
 use serde::{Deserialize, Serialize};
 
 #[derive(Queryable, Insertable, AsChangeset, Serialize, Deserialize)]
@@ -74,12 +75,24 @@ pub struct Session {
 #[table_name = "auth_code"]
 pub struct AuthCode {
     pub code: String,
+    pub client_id: String,
+    pub user_id: String,
+    pub scope: String,
 }
 
 #[derive(Queryable)]
 pub struct Token {
     pub access_token: String,
     pub created_at: chrono::NaiveDateTime,
+}
+
+impl Token {
+    pub fn is_valid(&self) -> bool {
+        // Expiration: 1 hour
+        let expired_at = self.created_at + Duration::hours(1);
+        let now = Utc::now().naive_utc();
+        expired_at >= now
+    }
 }
 
 #[derive(Queryable, Insertable, AsChangeset)]

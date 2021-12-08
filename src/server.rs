@@ -18,6 +18,7 @@ use crate::{
     internal::{
         authentication::AuthenticationRequest,
         token::{IdToken, SuccessfulTokenResponse},
+        userinfo::{SuccessfulUserinfoResponse, UserinfoRequest},
     },
     models::{AuthChallenge, AuthCode, Client, NewToken, Session},
     repository::{
@@ -221,12 +222,17 @@ async fn post_authorization<'a>(
             return Err(CustomError::SessionError);
         }
         // challenge check
-        if find_auth_challenge(&consentparam.consent_challenge, c).is_err() {
+        let challenge = find_auth_challenge(&consentparam.consent_challenge, c);
+        if challenge.is_err() {
             return Err(CustomError::ChallengeError);
         }
+        let challenge = challenge.unwrap();
         let auth_code = generate_challenge();
         create_auth_code(AuthCode {
             code: auth_code.clone(),
+            client_id: challenge.client_id.clone(),
+            user_id: String::from("userid"), // dummy user id
+            scope: challenge.scope.clone(),
         }, c)?;
         Ok(format!(
             "consent_challenge: {}, consent: {}, auth_code: {} // TODO: redirect to RP callback including authorization code",
@@ -284,6 +290,24 @@ async fn post_token(
     .await
 }
 
+#[get("/userinfo")]
+async fn get_userinfo(
+    inforeq: UserinfoRequest,
+    conn: DBPool,
+) -> Result<Json<SuccessfulUserinfoResponse>, CustomError> {
+    conn.run(move |c| {
+        let token = repository::find_token(&inforeq.bearer, c)?;
+        if token.is_valid() && token.access_token == inforeq.bearer {
+            return Ok(Json(SuccessfulUserinfoResponse {
+                sub: "userid".to_string(),
+                name: "tarou tanaka".to_string(),
+            }));
+        }
+        Err(CustomError::UnauthorizedError)
+    })
+    .await
+}
+
 #[launch]
 pub fn run() -> _ {
     let db: Map<_, Value> = map! {
@@ -302,6 +326,7 @@ pub fn run() -> _ {
                 get_authorization,
                 post_authorization,
                 post_token,
+                get_userinfo,
             ],
         )
         .attach(DBPool::fairing())

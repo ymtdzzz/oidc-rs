@@ -11,6 +11,9 @@ table! {
 table! {
     auth_code (code) {
         code -> Varchar,
+        client_id -> Varchar,
+        user_id -> Varchar,
+        scope -> Varchar,
     }
 }
 

@@ -22,6 +22,8 @@ pub enum CustomError {
     SessionError,
     #[error("Challenge error")]
     ChallengeError,
+    #[error("Unauthorized error")]
+    UnauthorizedError,
     #[error("JWT error")]
     JWTError(#[from] jsonwebtoken::errors::Error),
 }
@@ -59,6 +61,10 @@ impl<'r> Responder<'r, 'static> for CustomError {
                 },
             )
             .respond_to(request),
+            Self::UnauthorizedError => {
+                let res = Response::build().status(Status::Unauthorized).finalize();
+                Ok(res)
+            }
             Self::JWTError(e) => {
                 let body = format!("Internal error: {}", e);
                 let res = Response::build()

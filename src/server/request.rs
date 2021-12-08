@@ -1,7 +1,7 @@
 use std::convert::Infallible;
 
 use rocket::{
-    outcome::{try_outcome, IntoOutcome},
+    outcome::try_outcome,
     request::{self, FromRequest, Outcome},
     Request,
 };
