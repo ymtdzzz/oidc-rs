@@ -48,12 +48,3 @@ impl<'r> FromRequest<'r> for ConsentParams {
         Outcome::Success(param)
     }
 }
-
-#[derive(FromForm)]
-pub struct TokenParams {
-    pub grant_type: String,
-    pub code: String,
-    pub redirect_uri: String,
-    pub client_id: String,
-    pub client_secret: String,
-}

@@ -35,20 +35,20 @@ pub struct AuthenticationRequest {
 }
 
 impl AuthenticationRequest {
-    pub fn scope(&self) -> String {
-        self.scope.to_string()
+    pub fn scope(&self) -> &Scopes {
+        &self.scope
     }
 
-    pub fn client_id(&self) -> String {
-        self.client_id.clone()
+    pub fn client_id(&self) -> &str {
+        &self.client_id
     }
 
-    pub fn response_type(&self) -> String {
-        self.response_type.to_string()
+    pub fn response_type(&self) -> &ResponseTypes {
+        &self.response_type
     }
 
-    pub fn redirect_uri(&self) -> String {
-        self.redirect_uri.clone()
+    pub fn redirect_uri(&self) -> &str {
+        &self.redirect_uri
     }
 
     pub fn state(&self) -> &Option<String> {

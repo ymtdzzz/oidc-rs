@@ -1,5 +1,3 @@
-use std::convert::TryInto;
-
 use chrono::{Duration, Utc};
 use diesel::MysqlConnection;
 use rocket::{
@@ -17,7 +15,7 @@ use crate::{
     error::CustomError,
     internal::{
         authentication::AuthenticationRequest,
-        token::{IdToken, SuccessfulTokenResponse},
+        token::{IdToken, SuccessfulTokenResponse, TokenRequest},
         userinfo::{SuccessfulUserinfoResponse, UserinfoRequest},
     },
     models::{AuthChallenge, AuthCode, Client, NewToken, Session},
@@ -29,7 +27,7 @@ use crate::{
 
 use self::{
     context::{ConsentContext, ErrorContext, LoginContext},
-    request::{ClientParams, ConsentGetParams, ConsentParams, LoginParams, TokenParams},
+    request::{ClientParams, ConsentGetParams, ConsentParams, LoginParams},
     response::RedirectWithCookie,
 };
 
@@ -229,18 +227,18 @@ async fn post_authorization<'a>(
 
 #[post("/token", data = "<tokenparam>")]
 async fn post_token(
-    tokenparam: Form<TokenParams>,
+    tokenparam: Form<TokenRequest>,
     conn: DBPool,
 ) -> Result<Json<SuccessfulTokenResponse>, CustomError> {
     conn.run(move |c| {
         let client =
-            repository::find_client(&tokenparam.client_id, c).expect("failed to find the client");
+            repository::find_client(tokenparam.client_id(), c).expect("failed to find the client");
         // check client credential
-        if client.client_secret != tokenparam.client_secret {
+        if client.client_secret != tokenparam.client_secret() {
             return Err(CustomError::BadRequest);
         }
         // check auth code
-        if repository::find_auth_code(&tokenparam.code, c).is_err() {
+        if repository::find_auth_code(tokenparam.code(), c).is_err() {
             return Err(CustomError::BadRequest);
         }
         let access_token = generate_challenge();
@@ -255,7 +253,7 @@ async fn post_token(
         let claim = IdToken {
             iss: "http://localhost:5000".to_string(),
             sub: "userid".to_string(), // dummy id
-            aud: tokenparam.client_id.to_string(),
+            aud: tokenparam.client_id().to_string(),
             exp: exp.timestamp() as usize,
             iat: now.timestamp() as usize,
             nonce: "nonce".to_string(), // TODO: set nonce

@@ -1,21 +1,46 @@
 use std::str::FromStr;
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-struct TokenRequest {
+use super::enums::GrantType;
+
+#[derive(FromForm)]
+pub struct TokenRequest {
     grant_type: GrantType,
     code: String,
     redirect_uri: String,
     client_id: String,
+    client_secret: String,
 }
 
 impl TokenRequest {
+    pub fn grant_type(&self) -> &GrantType {
+        &self.grant_type
+    }
+
+    pub fn code(&self) -> &str {
+        &self.code
+    }
+
+    pub fn redirect_uri(&self) -> &str {
+        &self.redirect_uri
+    }
+
+    pub fn client_id(&self) -> &str {
+        &self.client_id
+    }
+
+    pub fn client_secret(&self) -> &str {
+        &self.client_secret
+    }
+
     pub fn new(
         grant_type: &str,
         code: &str,
         redirect_uri: &str,
         client_id: &str,
+        client_secret: &str,
     ) -> Result<TokenRequest> {
         // https://openid.net/specs/openid-connect-core-1_0.html#TokenRequestValidation
         // TODO:
@@ -29,30 +54,9 @@ impl TokenRequest {
             code: code.to_string(),
             redirect_uri: redirect_uri.to_string(),
             client_id: client_id.to_string(),
+            client_secret: client_secret.to_string(),
         })
     }
-}
-
-enum GrantType {
-    AuthorizationCode,
-}
-
-impl FromStr for GrantType {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "authorization_code" => Ok(GrantType::AuthorizationCode),
-            _ => Err(anyhow!("Unsupported grant_type")),
-        }
-    }
-}
-
-fn validate_grant_type(grant_type: &str) -> Result<()> {
-    for s in grant_type.split_whitespace() {
-        GrantType::from_str(s)?;
-    }
-    Ok(())
 }
 
 #[derive(Serialize)]
@@ -77,25 +81,4 @@ pub struct IdToken {
     pub exp: usize,
     pub iat: usize,
     pub nonce: String,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn validate_grant_type_ok() {
-        let result = validate_grant_type("authorization_code");
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn validate_grant_type_err_unsupported_type() {
-        let result = validate_grant_type("authorization_code invalid_grant_type");
-        let expected: Result<TokenRequest> = Err(anyhow!("Unsupported grant_type"));
-        assert_eq!(
-            expected.err().unwrap().to_string(),
-            result.err().unwrap().to_string()
-        );
-    }
 }

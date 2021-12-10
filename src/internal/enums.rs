@@ -175,6 +175,39 @@ impl FromStr for ResponseType {
     }
 }
 
+pub enum GrantType {
+    AuthorizationCode,
+}
+
+impl FromStr for GrantType {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "authorization_code" => Ok(GrantType::AuthorizationCode),
+            _ => Err(anyhow!("Unsupported grant_type")),
+        }
+    }
+}
+
+#[async_trait]
+impl<'r> FromFormField<'r> for GrantType {
+    fn from_value(field: ValueField<'r>) -> form::Result<'r, Self> {
+        Self::from_str(field.value)
+            .map_err(|e| Errors::from(form::Error::validation(format!("invalid scope: {}", e))))
+    }
+
+    async fn from_data(field: DataField<'r, '_>) -> form::Result<'r, Self> {
+        GrantType::from_str(
+            field
+                .request
+                .query_value::<&str>("grant_type")
+                .ok_or(Errors::from(form::Error::validation("invalid scope")))??,
+        )
+        .map_err(|e| Errors::from(form::Error::validation(format!("invalid scope: {}", e))))
+    }
+}
+
 pub fn validate_scope(scope: &str) -> Result<()> {
     let mut openid_found = false;
     for s in scope.split_whitespace() {
@@ -202,8 +235,17 @@ pub fn validate_response_type(response_type: &str) -> Result<()> {
     Ok(())
 }
 
+fn validate_grant_type(grant_type: &str) -> Result<()> {
+    for s in grant_type.split_whitespace() {
+        GrantType::from_str(s)?;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
+    use crate::internal::token::TokenRequest;
+
     use super::*;
 
     #[test]
@@ -242,6 +284,22 @@ mod tests {
     fn validate_response_type_err_unsupported_type() {
         let result = validate_response_type("code hoge");
         let expected: Result<()> = Err(anyhow!("Unsupported response_type"));
+        assert_eq!(
+            expected.err().unwrap().to_string(),
+            result.err().unwrap().to_string()
+        );
+    }
+
+    #[test]
+    fn validate_grant_type_ok() {
+        let result = validate_grant_type("authorization_code");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn validate_grant_type_err_unsupported_type() {
+        let result = validate_grant_type("authorization_code invalid_grant_type");
+        let expected: Result<TokenRequest> = Err(anyhow!("Unsupported grant_type"));
         assert_eq!(
             expected.err().unwrap().to_string(),
             result.err().unwrap().to_string()
