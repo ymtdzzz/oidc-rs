@@ -8,7 +8,7 @@ use rocket::{
 use rocket_dyn_templates::Template;
 use thiserror::Error;
 
-use crate::server::context::ErrorContext;
+use crate::{internal::authentication::ErrorAuthenticationResponse, server::context::ErrorContext};
 
 #[derive(Debug, Error)]
 pub enum CustomError {
@@ -26,6 +26,8 @@ pub enum CustomError {
     UnauthorizedError,
     #[error("JWT error")]
     JWTError(#[from] jsonwebtoken::errors::Error),
+    #[error("Authentication Error")]
+    AuthenticationError(ErrorAuthenticationResponse),
 }
 
 impl<'r> Responder<'r, 'static> for CustomError {
@@ -74,6 +76,7 @@ impl<'r> Responder<'r, 'static> for CustomError {
                     .finalize();
                 Ok(res)
             }
+            Self::AuthenticationError(e) => e.respond_to(request),
         }
     }
 }

@@ -14,7 +14,9 @@ use rocket_dyn_templates::Template;
 use crate::{
     error::CustomError,
     internal::{
-        authentication::AuthenticationRequest,
+        authentication::{
+            AuthenticationRequest, AuthenticationRequestParam, SuccessfulAuthenticationResponse,
+        },
         token::{IdToken, SuccessfulTokenResponse, TokenRequest},
         userinfo::{SuccessfulUserinfoResponse, UserinfoRequest},
     },
@@ -74,11 +76,12 @@ async fn get_client(
 
 #[get("/authenticate?<authparam..>")]
 async fn get_authenticate(
-    authparam: AuthenticationRequest,
+    authparam: AuthenticationRequestParam,
     conn: DBPool,
 ) -> Result<Template, CustomError> {
     conn.run(move |c| {
-        repository::find_client(&authparam.client_id(), c)?;
+        let client = repository::find_client(&authparam.client_id(), c)?;
+        let authparam = AuthenticationRequest::from(authparam, &client)?;
         let challenge = generate_challenge();
         repository::create_auth_challenge(
             AuthChallenge::from_auth_request(&challenge, authparam).expect(
@@ -187,7 +190,7 @@ async fn post_authorization<'a>(
     consentparam: Form<ConsentParams>,
     jar: &'a CookieJar<'_>,
     conn: DBPool,
-) -> Result<String, CustomError> {
+) -> Result<SuccessfulAuthenticationResponse, CustomError> {
     let mut session_id: Option<String> = None;
     if let Some(session) = jar.get("session_id") {
         session_id = Some(session.value().to_string());
@@ -212,17 +215,22 @@ async fn post_authorization<'a>(
         }
         let challenge = challenge.unwrap();
         let auth_code = generate_challenge();
-        create_auth_code(AuthCode {
-            code: auth_code.clone(),
-            client_id: challenge.client_id.clone(),
-            user_id: String::from("userid"), // dummy user id
-            scope: challenge.scope.clone(),
-        }, c)?;
-        Ok(format!(
-            "consent_challenge: {}, consent: {}, auth_code: {} // TODO: redirect to RP callback including authorization code",
-            consentparam.consent_challenge, consentparam.consent, auth_code
-        ))
-    }).await
+        create_auth_code(
+            AuthCode {
+                code: auth_code.clone(),
+                client_id: challenge.client_id.clone(),
+                user_id: String::from("userid"), // dummy user id
+                scope: challenge.scope.clone(),
+            },
+            c,
+        )?;
+        Ok(SuccessfulAuthenticationResponse::new(
+            &challenge.redirect_uri,
+            &auth_code,
+            &None,
+        )) // TODO: set state
+    })
+    .await
 }
 
 #[post("/token", data = "<tokenparam>")]
@@ -231,8 +239,7 @@ async fn post_token(
     conn: DBPool,
 ) -> Result<Json<SuccessfulTokenResponse>, CustomError> {
     conn.run(move |c| {
-        let client =
-            repository::find_client(tokenparam.client_id(), c).expect("failed to find the client");
+        let client = repository::find_client(tokenparam.client_id(), c)?;
         // check client credential
         if client.client_secret != tokenparam.client_secret() {
             return Err(CustomError::BadRequest);

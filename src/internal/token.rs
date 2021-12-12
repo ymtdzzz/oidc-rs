@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{fmt, str::FromStr};
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
@@ -69,8 +69,8 @@ pub struct SuccessfulTokenResponse {
 }
 
 #[derive(Serialize)]
-struct ErrorTokenResponse {
-    error: String,
+pub struct ErrorTokenResponse {
+    pub error: TokenError,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -81,4 +81,35 @@ pub struct IdToken {
     pub exp: usize,
     pub iat: usize,
     pub nonce: String,
+}
+
+pub enum TokenError {
+    InvalidRequest,
+    InvalidClient,
+    InvalidGrant,
+    UnauthorizedClient,
+    UnsupportedGrantType,
+    InvalidScope,
+}
+
+impl fmt::Display for TokenError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            &TokenError::InvalidRequest => write!(f, "invalid_request"),
+            &TokenError::InvalidClient => write!(f, "invalid_client"),
+            &TokenError::InvalidGrant => write!(f, "invalid_grant"),
+            &TokenError::UnauthorizedClient => write!(f, "unauthorized_client"),
+            &TokenError::UnsupportedGrantType => write!(f, "unsupported_grant_type"),
+            &TokenError::InvalidScope => write!(f, "invalid_scope"),
+        }
+    }
+}
+
+impl Serialize for TokenError {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&format!("{}", self))
+    }
 }

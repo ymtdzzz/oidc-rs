@@ -1,6 +1,6 @@
 use std::convert::TryInto;
 
-use crate::{internal::authentication::AuthenticationRequest, schema::*};
+use crate::{error::CustomError, internal::authentication::AuthenticationRequest, schema::*};
 use anyhow::Result;
 use chrono::{Duration, Utc};
 use serde::{Deserialize, Serialize};
@@ -38,7 +38,7 @@ impl AuthChallenge {
 }
 
 impl TryInto<AuthenticationRequest> for AuthChallenge {
-    type Error = anyhow::Error;
+    type Error = CustomError;
 
     fn try_into(self) -> Result<AuthenticationRequest, Self::Error> {
         AuthenticationRequest::new(
@@ -46,8 +46,7 @@ impl TryInto<AuthenticationRequest> for AuthChallenge {
             &self.response_type,
             &self.client_id,
             &self.redirect_uri,
-            None,
-            None,
+            &None,
         )
     }
 }
