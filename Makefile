@@ -26,8 +26,8 @@ build-app:
 
 .PHONY: push-app
 push-app:
-	docker tag oidc-test-db:latest 936630031871.dkr.ecr.us-east-1.amazonaws.com/oidc-test-db:latest
-	docker push 936630031871.dkr.ecr.us-east-1.amazonaws.com/oidc-test-db:latest
+	docker tag oidc-test-app:latest 936630031871.dkr.ecr.us-east-1.amazonaws.com/oidc-test-app:latest
+	docker push 936630031871.dkr.ecr.us-east-1.amazonaws.com/oidc-test-app:latest
 
 .PHONY: build-db
 build-db:
@@ -35,5 +35,5 @@ build-db:
 
 .PHONY: push-db
 push-db:
-	docker tag oidc-test-app:latest 936630031871.dkr.ecr.us-east-1.amazonaws.com/oidc-test-app:latest
-	docker push 936630031871.dkr.ecr.us-east-1.amazonaws.com/oidc-test-app:latest
+	docker tag oidc-test-db:latest 936630031871.dkr.ecr.us-east-1.amazonaws.com/oidc-test-db:latest
+	docker push 936630031871.dkr.ecr.us-east-1.amazonaws.com/oidc-test-db:latest
