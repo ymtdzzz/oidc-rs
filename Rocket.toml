@@ -1,17 +1,12 @@
 [default.databases]
 oidc_db = { url = "mysql://oidc:oidc@127.0.0.1/oidc" }
 
-[development]
-address = "localhost"
+[debug]
+address = "127.0.0.1"
 port = 8000
 log = "normal"
 
-[staging]
-address = "0.0.0.0"
-port = 80
-log = "normal"
-
-[production]
+[release]
 address = "0.0.0.0"
 port = 80
 log = "normal"
