@@ -12,7 +12,8 @@ use serde::{Deserialize, Serialize};
 use super::enums::GrantType;
 
 pub struct Basic {
-    pub token: String,
+    pub client_id: String,
+    pub client_secret: String,
 }
 
 #[async_trait]
@@ -31,9 +32,23 @@ impl<'r> FromRequest<'r> for Basic {
                     ));
                 }
                 match auth_headers.get(1) {
-                    Some(token) => Outcome::Success(Basic {
-                        token: token.to_string(),
-                    }),
+                    Some(token_base64) => {
+                        if let Ok(token_bytes) = base64::decode(token_base64) {
+                            if let Ok(token_decoded) = std::str::from_utf8(&token_bytes) {
+                                let id_secret = token_decoded.split(":").collect::<Vec<&str>>();
+                                if id_secret.get(0).is_some() && id_secret.get(1).is_some() {
+                                    return Outcome::Success(Basic {
+                                        client_id: id_secret.get(0).unwrap().to_string(),
+                                        client_secret: id_secret.get(1).unwrap().to_string(),
+                                    });
+                                }
+                            }
+                        }
+                        return Outcome::Failure((
+                            Status::Unauthorized,
+                            anyhow::anyhow!("invalid token"),
+                        ));
+                    }
                     None => {
                         Outcome::Failure((Status::Unauthorized, anyhow::anyhow!("invalid token")))
                     }

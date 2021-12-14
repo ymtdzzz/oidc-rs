@@ -253,7 +253,7 @@ async fn post_token(
         let auth_code = repository::find_auth_code(tokenparam.code(), c)?;
         let client = repository::find_client(&auth_code.client_id, c)?;
         // check client credential
-        if basic.token != client.client_secret {
+        if basic.client_id != client.client_id || basic.client_secret != client.client_secret {
             return Err(CustomError::UnauthorizedError);
         }
         let access_token = generate_challenge();
