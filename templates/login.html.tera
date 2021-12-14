@@ -7,7 +7,10 @@
     <input name="username" id="username" value="">
     <label for="password">password</label>
     <input name="password" id="password" type="password" value="">
-    <input name="login_challenge" type="hidden" value="{{ login_challenge }}"><br>
+    <input name="login_challenge" type="hidden" value="{{ login_challenge }}">
+    {% if state %}
+      <input name="state" type="hidden" value="{{ state }}">
+    {% endif %}
     <p>username: foobar, password: 1234</p>
     <button type="submit">Login</button>
   </form>

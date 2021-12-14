@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use chrono::{Duration, Utc};
 use diesel::MysqlConnection;
 use rocket::{
@@ -17,7 +19,8 @@ use crate::{
         authentication::{
             AuthenticationRequest, AuthenticationRequestParam, SuccessfulAuthenticationResponse,
         },
-        token::{IdToken, SuccessfulTokenResponse, TokenRequest},
+        enums::{Scope, Scopes},
+        token::{Basic, IdToken, SuccessfulTokenResponse, TokenRequest},
         userinfo::{SuccessfulUserinfoResponse, UserinfoRequest},
     },
     models::{AuthChallenge, AuthCode, Client, NewToken, Session},
@@ -82,11 +85,10 @@ async fn get_authenticate(
     conn.run(move |c| {
         let client = repository::find_client(&authparam.client_id(), c)?;
         let authparam = AuthenticationRequest::from(authparam, &client)?;
+        let state = authparam.state().clone();
         let challenge = generate_challenge();
         repository::create_auth_challenge(
-            AuthChallenge::from_auth_request(&challenge, authparam).expect(
-                "failed to convert from the AuthenticationRequest into the model AuthChallenge",
-            ),
+            AuthChallenge::from_auth_request(&challenge, authparam),
             c,
         )?;
         Ok(Template::render(
@@ -94,6 +96,7 @@ async fn get_authenticate(
             &LoginContext {
                 error_msg: None,
                 login_challenge: challenge,
+                state,
             },
         ))
     })
@@ -122,13 +125,17 @@ async fn post_authenticate(
                 },
                 c,
             )?;
+            let mut next = format!(
+                "/authorization?consent_challenge={}",
+                &loginparam.login_challenge
+            );
+            if let Some(s) = &loginparam.state {
+                next = format!("{}&state={}", next, s);
+            }
             Ok(RedirectWithCookie {
                 key: String::from("session_id"),
                 value: session_id,
-                next: format!(
-                    "/authorization?consent_challenge={}",
-                    &loginparam.login_challenge
-                ),
+                next,
             })
         } else {
             Err(CustomError::ValidationError(Template::render(
@@ -136,6 +143,7 @@ async fn post_authenticate(
                 &LoginContext {
                     error_msg: Some(String::from("username or password is incorrect")),
                     login_challenge: loginparam.login_challenge.to_string(),
+                    state: loginparam.state.clone(),
                 },
             )))
         }
@@ -176,6 +184,7 @@ async fn get_authorization<'a>(
                     "consent",
                     &ConsentContext {
                         consent_challenge: param.consent_challenge,
+                        state: param.state,
                     },
                 ))
             }
@@ -227,8 +236,8 @@ async fn post_authorization<'a>(
         Ok(SuccessfulAuthenticationResponse::new(
             &challenge.redirect_uri,
             &auth_code,
-            &None,
-        )) // TODO: set state
+            &consentparam.state,
+        ))
     })
     .await
 }
@@ -236,30 +245,31 @@ async fn post_authorization<'a>(
 #[post("/token", data = "<tokenparam>")]
 async fn post_token(
     tokenparam: Form<TokenRequest>,
+    basic: Basic,
     conn: DBPool,
 ) -> Result<Json<SuccessfulTokenResponse>, CustomError> {
     conn.run(move |c| {
         let client = repository::find_client(tokenparam.client_id(), c)?;
         // check client credential
-        if client.client_secret != tokenparam.client_secret() {
-            return Err(CustomError::BadRequest);
+        if basic.token != client.client_secret {
+            return Err(CustomError::UnauthorizedError);
         }
         // check auth code
-        if repository::find_auth_code(tokenparam.code(), c).is_err() {
-            return Err(CustomError::BadRequest);
-        }
+        let auth_code = repository::find_auth_code(tokenparam.code(), c)?;
         let access_token = generate_challenge();
         repository::create_token(
             NewToken {
                 access_token: access_token.clone(),
+                user_id: auth_code.user_id,
+                scope: auth_code.scope,
             },
             c,
         )?;
         let now = Utc::now();
         let exp = now + Duration::hours(12);
         let claim = IdToken {
-            iss: "http://localhost:5000".to_string(),
-            sub: "userid".to_string(), // dummy id
+            iss: "http://localhost:5000".to_string(), // TODO
+            sub: "userid".to_string(),                // dummy id
             aud: tokenparam.client_id().to_string(),
             exp: exp.timestamp() as usize,
             iat: now.timestamp() as usize,
@@ -289,10 +299,40 @@ async fn get_userinfo(
     conn.run(move |c| {
         let token = repository::find_token(&inforeq.bearer, c)?;
         if token.is_valid() && token.access_token == inforeq.bearer {
-            return Ok(Json(SuccessfulUserinfoResponse {
+            let scopes = Scopes::from_str(&token.scope).unwrap();
+            let mut res = SuccessfulUserinfoResponse {
                 sub: "userid".to_string(),
                 name: "tarou tanaka".to_string(),
-            }));
+                email: None,
+                email_verified: None,
+                address: None,
+                phone_number: None,
+                phone_number_verified: None,
+            };
+            for s in scopes.scopes.iter() {
+                match s {
+                    &Scope::All => {
+                        res.email = Some(String::from("test@example.com"));
+                        res.email_verified = Some(true);
+                        res.address = Some(String::from("address"));
+                        res.phone_number = Some(String::from("111-1234-5678"));
+                        res.phone_number_verified = Some(true);
+                    }
+                    &Scope::Phone => {
+                        res.phone_number = Some(String::from("111-1234-5678"));
+                        res.phone_number_verified = Some(true);
+                    }
+                    &Scope::Email => {
+                        res.email = Some(String::from("test@example.com"));
+                        res.email_verified = Some(true);
+                    }
+                    &Scope::Address => {
+                        res.address = Some(String::from("address"));
+                    }
+                    _ => {}
+                }
+            }
+            return Ok(Json(res));
         }
         Err(CustomError::UnauthorizedError)
     })

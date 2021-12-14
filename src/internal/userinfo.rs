@@ -42,6 +42,11 @@ impl<'r> FromRequest<'r> for UserinfoRequest {
 pub struct SuccessfulUserinfoResponse {
     pub sub: String,
     pub name: String, // sample data
+    pub email: Option<String>,
+    pub email_verified: Option<bool>,
+    pub address: Option<String>,
+    pub phone_number: Option<String>,
+    pub phone_number_verified: Option<bool>,
 }
 
 #[derive(Serialize)]

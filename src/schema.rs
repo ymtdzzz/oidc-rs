@@ -5,6 +5,7 @@ table! {
         scope -> Varchar,
         response_type -> Varchar,
         redirect_uri -> Varchar,
+        state -> Nullable<Varchar>,
     }
 }
 
@@ -36,6 +37,8 @@ table! {
 table! {
     tokens (access_token) {
         access_token -> Varchar,
+        user_id -> Varchar,
+        scope -> Varchar,
         created_at -> Datetime,
     }
 }

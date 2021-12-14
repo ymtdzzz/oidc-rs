@@ -4,7 +4,7 @@ use anyhow::{anyhow, Result};
 use rocket::form::{self, DataField, Errors, FromFormField, ValueField};
 
 pub struct Scopes {
-    scopes: Vec<Scope>,
+    pub scopes: Vec<Scope>,
 }
 
 impl FromStr for Scopes {
@@ -42,6 +42,8 @@ pub enum Scope {
     Profile,
     Address,
     Phone,
+    Email,
+    All,
 }
 
 impl FromStr for Scope {
@@ -53,6 +55,8 @@ impl FromStr for Scope {
             "profile" => Ok(Scope::Profile),
             "address" => Ok(Scope::Address),
             "phone" => Ok(Scope::Phone),
+            "email" => Ok(Scope::Email),
+            "all" => Ok(Scope::All),
             _ => Err(anyhow!("Unsupported scope")),
         }
     }
@@ -65,6 +69,8 @@ impl ToString for Scope {
             Scope::Profile => String::from("profile"),
             Scope::Address => String::from("address"),
             Scope::Phone => String::from("phone"),
+            Scope::Email => String::from("email"),
+            Scope::All => String::from("all"),
         }
     }
 }

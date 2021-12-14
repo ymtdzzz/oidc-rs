@@ -2,6 +2,9 @@
   <form action="/authorization" method="POST">
     <p>TODO: scopes checkbox</p>
     <input name="consent_challenge" type="hidden" value="{{ consent_challenge }}"><br>
+    {% if state %}
+      <input name="state" type="hidden" value="{{ state }}"><br>
+    {% endif %}
     <button name="consent" type="submit" value="ok">Accept</button>
   </form>
 </html>

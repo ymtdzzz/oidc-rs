@@ -1,9 +1,48 @@
 use std::{fmt, str::FromStr};
 
 use anyhow::Result;
+use rocket::{
+    http::Status,
+    outcome::try_outcome,
+    request::{self, FromRequest, Outcome},
+    Request,
+};
 use serde::{Deserialize, Serialize};
 
 use super::enums::GrantType;
+
+pub struct Basic {
+    pub token: String,
+}
+
+#[async_trait]
+impl<'r> FromRequest<'r> for Basic {
+    type Error = anyhow::Error;
+
+    async fn from_request(request: &'r Request<'_>) -> request::Outcome<Self, Self::Error> {
+        match request.headers().get_one("Authorization") {
+            Some(h) => {
+                let auth_headers = h.split_whitespace().collect::<Vec<&str>>();
+                let prefix = auth_headers.get(0);
+                if prefix.is_none() || prefix.unwrap() != &"Basic" {
+                    return Outcome::Failure((
+                        Status::Unauthorized,
+                        anyhow::anyhow!("invalid token"),
+                    ));
+                }
+                match auth_headers.get(1) {
+                    Some(token) => Outcome::Success(Basic {
+                        token: token.to_string(),
+                    }),
+                    None => {
+                        Outcome::Failure((Status::Unauthorized, anyhow::anyhow!("invalid token")))
+                    }
+                }
+            }
+            None => Outcome::Failure((Status::Unauthorized, anyhow::anyhow!("invalid token"))),
+        }
+    }
+}
 
 #[derive(FromForm)]
 pub struct TokenRequest {
@@ -11,7 +50,6 @@ pub struct TokenRequest {
     code: String,
     redirect_uri: String,
     client_id: String,
-    client_secret: String,
 }
 
 impl TokenRequest {
@@ -29,33 +67,6 @@ impl TokenRequest {
 
     pub fn client_id(&self) -> &str {
         &self.client_id
-    }
-
-    pub fn client_secret(&self) -> &str {
-        &self.client_secret
-    }
-
-    pub fn new(
-        grant_type: &str,
-        code: &str,
-        redirect_uri: &str,
-        client_id: &str,
-        client_secret: &str,
-    ) -> Result<TokenRequest> {
-        // https://openid.net/specs/openid-connect-core-1_0.html#TokenRequestValidation
-        // TODO:
-        //  - Authenticate the Client if it was issued Client Credentials or if it uses another Client Authentication method, per Section 9.
-        //  - Ensure the Authorization Code was issued to the authenticated Client.
-        //  - Verify that the Authorization Code is valid.
-        //  - If possible, verify that the Authorization Code has not been previously used.
-        //  - Ensure that the redirect_uri parameter value is identical to the redirect_uri parameter value that was included in the initial Authorization Request. If the redirect_uri parameter value is not present when there is only one registered redirect_uri value, the Authorization Server MAY return an error (since the Client should have included the parameter) or MAY proceed without an error (since OAuth 2.0 permits the parameter to be omitted in this case).  - Verify that the Authorization Code used was issued in response to an OpenID Connect Authentication Request (so that an ID Token will be returned from the Token Endpoint).
-        Ok(TokenRequest {
-            grant_type: GrantType::from_str(grant_type)?,
-            code: code.to_string(),
-            redirect_uri: redirect_uri.to_string(),
-            client_id: client_id.to_string(),
-            client_secret: client_secret.to_string(),
-        })
     }
 }
 

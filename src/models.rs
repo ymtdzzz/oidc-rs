@@ -23,17 +23,19 @@ pub struct AuthChallenge {
     pub scope: String,
     pub response_type: String,
     pub redirect_uri: String,
+    pub state: Option<String>,
 }
 
 impl AuthChallenge {
-    pub fn from_auth_request(challenge: &str, req: AuthenticationRequest) -> Result<Self> {
-        Ok(AuthChallenge {
+    pub fn from_auth_request(challenge: &str, req: AuthenticationRequest) -> Self {
+        AuthChallenge {
             challenge: challenge.to_string(),
             client_id: req.client_id().to_string(),
             scope: req.scope().to_string(),
             response_type: req.response_type().to_string(),
             redirect_uri: req.redirect_uri().to_string(),
-        })
+            state: req.state().to_owned(),
+        }
     }
 }
 
@@ -69,6 +71,8 @@ pub struct AuthCode {
 #[derive(Queryable)]
 pub struct Token {
     pub access_token: String,
+    pub user_id: String,
+    pub scope: String,
     pub created_at: chrono::NaiveDateTime,
 }
 
@@ -85,4 +89,6 @@ impl Token {
 #[table_name = "tokens"]
 pub struct NewToken {
     pub access_token: String,
+    pub user_id: String,
+    pub scope: String,
 }

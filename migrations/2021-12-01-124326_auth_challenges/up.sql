@@ -4,6 +4,7 @@ CREATE TABLE auth_challenges (
   client_id VARCHAR(255) NOT NULL,
   scope VARCHAR(255) NOT NULL,
   response_type VARCHAR(255) NOT NULL,
-  redirect_uri VARCHAR(255) NOT NULL
+  redirect_uri VARCHAR(255) NOT NULL,
+  state VARCHAR(255)
 );
 

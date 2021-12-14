@@ -18,11 +18,13 @@ pub struct LoginParams {
     pub username: String,
     pub password: String,
     pub login_challenge: String,
+    pub state: Option<String>,
 }
 
 #[derive(FromForm, Debug)]
 pub struct ConsentGetParams {
     pub consent_challenge: String,
+    pub state: Option<String>,
 }
 
 #[async_trait]
@@ -38,6 +40,7 @@ impl<'r> FromRequest<'r> for ConsentGetParams {
 pub struct ConsentParams {
     pub consent: String,
     pub consent_challenge: String,
+    pub state: Option<String>,
 }
 
 #[async_trait]

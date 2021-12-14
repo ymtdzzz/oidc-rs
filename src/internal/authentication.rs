@@ -64,14 +64,14 @@ impl AuthenticationRequest {
             scope: Scopes::from_str(scope).map_err(|_e| {
                 CustomError::AuthenticationError(ErrorAuthenticationResponse::new(
                     redirect_uri,
-                    AuthorizationError::RequestNotSupported,
+                    AuthorizationError::InvalidScope,
                     state,
                 ))
             })?,
             response_type: ResponseTypes::from_str(response_type).map_err(|_e| {
                 CustomError::AuthenticationError(ErrorAuthenticationResponse::new(
                     redirect_uri,
-                    AuthorizationError::RequestNotSupported,
+                    AuthorizationError::UnsupportedResponseType,
                     state,
                 ))
             })?,
@@ -87,14 +87,14 @@ impl AuthenticationRequest {
         let scope = Scopes::from_str(&param.scope).map_err(|_e| {
             CustomError::AuthenticationError(ErrorAuthenticationResponse::new(
                 "hoge",
-                AuthorizationError::RequestNotSupported,
+                AuthorizationError::InvalidScope,
                 &param.state,
             ))
         })?;
         let response_type = ResponseTypes::from_str(&param.response_type).map_err(|_e| {
             CustomError::AuthenticationError(ErrorAuthenticationResponse::new(
                 "hoge",
-                AuthorizationError::RequestNotSupported,
+                AuthorizationError::UnsupportedResponseType,
                 &param.state,
             ))
         })?;
@@ -169,6 +169,13 @@ impl<'r> Responder<'r, 'static> for SuccessfulAuthenticationResponse {
 /// AuthorizationError represents an error code for ErrorAuthenticationResponse
 #[derive(Debug)]
 pub enum AuthorizationError {
+    InvalidRequest,
+    UnauthorizedClient,
+    AccessDenied,
+    UnsupportedResponseType,
+    InvalidScope,
+    ServerError,
+    TemporarilyUnavailable,
     InteractionRequired,
     LoginRequired,
     AccountSelectionRequired,
@@ -183,6 +190,13 @@ pub enum AuthorizationError {
 impl fmt::Display for AuthorizationError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            AuthorizationError::InvalidRequest => write!(f, "invalid_request"),
+            AuthorizationError::UnauthorizedClient => write!(f, "unauthorized_client"),
+            AuthorizationError::AccessDenied => write!(f, "access_denied"),
+            AuthorizationError::UnsupportedResponseType => write!(f, "unsupported_response_type"),
+            AuthorizationError::InvalidScope => write!(f, "invalid_scope"),
+            AuthorizationError::ServerError => write!(f, "server_error"),
+            AuthorizationError::TemporarilyUnavailable => write!(f, "temporarily_unavailable"),
             AuthorizationError::InteractionRequired => write!(f, "interaction_required"),
             AuthorizationError::LoginRequired => write!(f, "login_required"),
             AuthorizationError::AccountSelectionRequired => write!(f, "account_selection_required"),
