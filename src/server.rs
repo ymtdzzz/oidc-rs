@@ -249,13 +249,13 @@ async fn post_token(
     conn: DBPool,
 ) -> Result<Json<SuccessfulTokenResponse>, CustomError> {
     conn.run(move |c| {
-        let client = repository::find_client(tokenparam.client_id(), c)?;
+        // check auth code
+        let auth_code = repository::find_auth_code(tokenparam.code(), c)?;
+        let client = repository::find_client(&auth_code.client_id, c)?;
         // check client credential
         if basic.token != client.client_secret {
             return Err(CustomError::UnauthorizedError);
         }
-        // check auth code
-        let auth_code = repository::find_auth_code(tokenparam.code(), c)?;
         let access_token = generate_challenge();
         repository::create_token(
             NewToken {
@@ -270,7 +270,7 @@ async fn post_token(
         let claim = IdToken {
             iss: "http://localhost:5000".to_string(), // TODO
             sub: "userid".to_string(),                // dummy id
-            aud: tokenparam.client_id().to_string(),
+            aud: auth_code.client_id,
             exp: exp.timestamp() as usize,
             iat: now.timestamp() as usize,
             nonce: "nonce".to_string(), // TODO: set nonce

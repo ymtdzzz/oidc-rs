@@ -49,7 +49,6 @@ pub struct TokenRequest {
     grant_type: GrantType,
     code: String,
     redirect_uri: String,
-    client_id: String,
 }
 
 impl TokenRequest {
@@ -63,10 +62,6 @@ impl TokenRequest {
 
     pub fn redirect_uri(&self) -> &str {
         &self.redirect_uri
-    }
-
-    pub fn client_id(&self) -> &str {
-        &self.client_id
     }
 }
 
