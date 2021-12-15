@@ -3,3 +3,5 @@
 /target
 /coverage
 /docker/mysql
+*.pem
+jwks.json

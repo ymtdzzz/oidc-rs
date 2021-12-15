@@ -276,10 +276,11 @@ async fn post_token(
             iat: now.timestamp() as usize,
             nonce: auth_code.nonce,
         };
+        let jwt_header = jsonwebtoken::Header::new(jsonwebtoken::Algorithm::RS256);
         let id_token = jsonwebtoken::encode(
-            &jsonwebtoken::Header::default(),
+            &jwt_header,
             &claim,
-            &jsonwebtoken::EncodingKey::from_base64_secret("c2VjcmV0a2V5").unwrap(),
+            &jsonwebtoken::EncodingKey::from_rsa_pem(include_bytes!("private-key.pem")).unwrap(),
         )?;
         Ok(Json(SuccessfulTokenResponse {
             access_token,
