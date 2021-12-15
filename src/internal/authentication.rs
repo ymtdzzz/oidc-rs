@@ -20,7 +20,7 @@ pub struct AuthenticationRequest {
     client_id: String,
     redirect_uri: String,
     state: Option<String>,
-    // nonce: String,
+    nonce: Option<String>,
     // display: String,
     // prompt: String,
     // max_age: u64,
@@ -53,12 +53,17 @@ impl AuthenticationRequest {
         &self.state
     }
 
+    pub fn nonce(&self) -> &Option<String> {
+        &self.nonce
+    }
+
     pub fn new(
         scope: &str,
         response_type: &str,
         client_id: &str,
         redirect_uri: &str,
         state: &Option<String>,
+        nonce: &Option<String>,
     ) -> Result<Self, CustomError> {
         Ok(Self {
             scope: Scopes::from_str(scope).map_err(|_e| {
@@ -78,6 +83,7 @@ impl AuthenticationRequest {
             client_id: client_id.to_string(),
             redirect_uri: redirect_uri.to_string(),
             state: state.to_owned(),
+            nonce: nonce.to_owned(),
         })
     }
 
@@ -105,6 +111,7 @@ impl AuthenticationRequest {
             client_id: param.client_id.to_string(),
             redirect_uri: param.redirect_uri.to_string(),
             state: param.state.map(|s| s.to_string()),
+            nonce: param.nonce.map(|s| s.to_string()),
         })
     }
 }
@@ -116,7 +123,7 @@ pub struct AuthenticationRequestParam {
     client_id: String,
     redirect_uri: String,
     state: Option<String>,
-    // nonce: String,
+    nonce: Option<String>,
     // display: String,
     // prompt: String,
     // max_age: u64,

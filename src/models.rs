@@ -24,6 +24,7 @@ pub struct AuthChallenge {
     pub response_type: String,
     pub redirect_uri: String,
     pub state: Option<String>,
+    pub nonce: Option<String>,
 }
 
 impl AuthChallenge {
@@ -35,6 +36,7 @@ impl AuthChallenge {
             response_type: req.response_type().to_string(),
             redirect_uri: req.redirect_uri().to_string(),
             state: req.state().to_owned(),
+            nonce: req.nonce().to_owned(),
         }
     }
 }
@@ -48,7 +50,8 @@ impl TryInto<AuthenticationRequest> for AuthChallenge {
             &self.response_type,
             &self.client_id,
             &self.redirect_uri,
-            &None,
+            &self.state,
+            &self.nonce,
         )
     }
 }
@@ -66,6 +69,7 @@ pub struct AuthCode {
     pub client_id: String,
     pub user_id: String,
     pub scope: String,
+    pub nonce: String,
 }
 
 #[derive(Queryable)]

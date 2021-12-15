@@ -230,6 +230,7 @@ async fn post_authorization<'a>(
                 client_id: challenge.client_id.clone(),
                 user_id: String::from("userid"), // dummy user id
                 scope: challenge.scope.clone(),
+                nonce: challenge.nonce.unwrap_or("".to_string()),
             },
             c,
         )?;
@@ -268,12 +269,12 @@ async fn post_token(
         let now = Utc::now();
         let exp = now + Duration::hours(12);
         let claim = IdToken {
-            iss: "http://localhost:5000".to_string(), // TODO
-            sub: "userid".to_string(),                // dummy id
+            iss: "http://example.com".to_string(),
+            sub: "userid".to_string(), // dummy id
             aud: auth_code.client_id,
             exp: exp.timestamp() as usize,
             iat: now.timestamp() as usize,
-            nonce: "nonce".to_string(), // TODO: set nonce
+            nonce: auth_code.nonce,
         };
         let id_token = jsonwebtoken::encode(
             &jsonwebtoken::Header::default(),

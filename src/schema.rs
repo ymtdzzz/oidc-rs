@@ -6,6 +6,7 @@ table! {
         response_type -> Varchar,
         redirect_uri -> Varchar,
         state -> Nullable<Varchar>,
+        nonce -> Nullable<Varchar>,
     }
 }
 
@@ -15,6 +16,7 @@ table! {
         client_id -> Varchar,
         user_id -> Varchar,
         scope -> Varchar,
+        nonce -> Varchar,
     }
 }
 
