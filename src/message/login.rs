@@ -5,6 +5,14 @@ use rocket::{
 };
 use time::{Duration, OffsetDateTime};
 
+#[derive(FromForm)]
+pub struct LoginParams {
+    pub username: String,
+    pub password: String,
+    pub login_challenge: String,
+    pub state: Option<String>,
+}
+
 pub struct RedirectWithCookie {
     pub key: String,
     pub value: String,

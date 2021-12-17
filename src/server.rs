@@ -14,13 +14,16 @@ use rocket::{
 use rocket_dyn_templates::Template;
 
 use crate::{
+    context::{ConsentContext, ErrorContext, LoginContext},
     error::CustomError,
-    internal::{
+    message::{
         authentication::{
-            AuthenticationRequest, AuthenticationRequestParam, AuthorizationError,
-            ErrorAuthenticationResponse, SuccessfulAuthenticationResponse,
+            AuthenticationRequest, AuthenticationRequestParam, SuccessfulAuthenticationResponse,
         },
+        client::ClientParams,
+        consent::{ConsentGetParams, ConsentParams},
         enums::{Scope, Scopes},
+        login::{LoginParams, RedirectWithCookie},
         token::{Basic, IdToken, SuccessfulTokenResponse, TokenRequest},
         userinfo::{Address, SuccessfulUserinfoResponse, UserinfoRequest},
     },
@@ -30,16 +33,6 @@ use crate::{
     },
     utils::generate_challenge,
 };
-
-use self::{
-    context::{ConsentContext, ErrorContext, LoginContext},
-    request::{ClientParams, ConsentGetParams, ConsentParams, LoginParams},
-    response::RedirectWithCookie,
-};
-
-pub mod context;
-mod request;
-mod response;
 
 #[database("oidc_db")]
 pub struct DBPool(MysqlConnection);

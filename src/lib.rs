@@ -6,8 +6,9 @@ extern crate diesel;
 #[macro_use]
 extern crate rocket_sync_db_pools;
 
+pub mod context;
 pub mod error;
-pub mod internal;
+pub mod message;
 pub mod models;
 pub mod repository;
 pub mod schema;

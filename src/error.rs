@@ -8,7 +8,7 @@ use rocket::{
 use rocket_dyn_templates::Template;
 use thiserror::Error;
 
-use crate::{internal::authentication::ErrorAuthenticationResponse, server::context::ErrorContext};
+use crate::{context::ErrorContext, message::authentication::ErrorAuthenticationResponse};
 
 #[derive(Debug, Error)]
 pub enum CustomError {

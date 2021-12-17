@@ -1,9 +1,8 @@
-use std::{fmt, str::FromStr};
+use std::fmt;
 
 use anyhow::Result;
 use rocket::{
     http::Status,
-    outcome::try_outcome,
     request::{self, FromRequest, Outcome},
     Request,
 };

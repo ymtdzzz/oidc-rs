@@ -87,9 +87,7 @@ impl AuthenticationRequest {
         })
     }
 
-    pub fn from(param: AuthenticationRequestParam, _client: &Client) -> Result<Self, CustomError> {
-        // TODO: validation
-        // TODO: validate with client
+    pub fn from(param: AuthenticationRequestParam, client: &Client) -> Result<Self, CustomError> {
         let redirect_uri = param.redirect_uri.unwrap_or("".to_string());
         let param_scope = param.scope.ok_or(CustomError::AuthenticationError(
             ErrorAuthenticationResponse::new(
@@ -105,6 +103,15 @@ impl AuthenticationRequest {
                 &param.state,
             ),
         )))?;
+        client
+            .check_scopes(&scope)
+            .or(Err(CustomError::AuthenticationError(
+                ErrorAuthenticationResponse::new(
+                    &redirect_uri,
+                    AuthorizationError::InvalidScope,
+                    &param.state,
+                ),
+            )))?;
         let param_res_type = param.response_type.ok_or(CustomError::AuthenticationError(
             ErrorAuthenticationResponse::new(
                 &redirect_uri,
@@ -119,6 +126,15 @@ impl AuthenticationRequest {
                 &param.state,
             )),
         ))?;
+        client
+            .check_restypes(&response_type)
+            .or(Err(CustomError::AuthenticationError(
+                ErrorAuthenticationResponse::new(
+                    &redirect_uri,
+                    AuthorizationError::UnsupportedResponseType,
+                    &param.state,
+                ),
+            )))?;
         let param_client_id = param.client_id.ok_or(CustomError::AuthenticationError(
             ErrorAuthenticationResponse::new(
                 &redirect_uri,

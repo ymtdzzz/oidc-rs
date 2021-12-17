@@ -1,8 +1,16 @@
-use std::convert::TryInto;
+use std::{convert::TryInto, str::FromStr};
 
-use crate::{error::CustomError, internal::authentication::AuthenticationRequest, schema::*};
+use crate::{
+    error::CustomError,
+    message::{
+        authentication::AuthenticationRequest,
+        enums::{ResponseTypes, Scopes},
+    },
+    schema::*,
+};
 use anyhow::Result;
 use chrono::{Duration, Utc};
+use rocket::form::validate::Contains;
 use serde::{Deserialize, Serialize};
 
 #[derive(Queryable, Insertable, AsChangeset, Serialize, Deserialize)]
@@ -13,6 +21,28 @@ pub struct Client {
     pub scope: String,
     pub response_type: String,
     pub redirect_uri: String,
+}
+
+impl Client {
+    pub fn check_scopes(&self, scopes: &Scopes) -> anyhow::Result<()> {
+        let s = Scopes::from_str(&self.scope)?;
+        for scope in &scopes.scopes {
+            if !s.scopes.contains(scope) {
+                return Err(anyhow::anyhow!("invalid scope"));
+            }
+        }
+        Ok(())
+    }
+
+    pub fn check_restypes(&self, restypes: &ResponseTypes) -> anyhow::Result<()> {
+        let r = ResponseTypes::from_str(&self.response_type)?;
+        for restype in &restypes.types {
+            if !r.types.contains(restype) {
+                return Err(anyhow::anyhow!("invalid response type"));
+            }
+        }
+        Ok(())
+    }
 }
 
 #[derive(Queryable, Insertable, AsChangeset, Serialize, Deserialize)]
@@ -95,4 +125,71 @@ pub struct NewToken {
     pub access_token: String,
     pub user_id: String,
     pub scope: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::message::enums::{ResponseType, Scope};
+
+    use super::*;
+
+    #[test]
+    fn client_check_scopes_ok() {
+        let input = Scopes {
+            scopes: vec![Scope::OpenID, Scope::Profile],
+        };
+        let client = Client {
+            client_id: String::default(),
+            client_secret: String::default(),
+            scope: String::from("openid email profile"),
+            response_type: String::default(),
+            redirect_uri: String::default(),
+        };
+        assert!(client.check_scopes(&input).is_ok());
+    }
+
+    #[test]
+    fn client_check_sopes_ng() {
+        let input = Scopes {
+            scopes: vec![Scope::OpenID, Scope::Email],
+        };
+        let client = Client {
+            client_id: String::default(),
+            client_secret: String::default(),
+            scope: String::from("openid profile"),
+            response_type: String::default(),
+            redirect_uri: String::default(),
+        };
+        assert!(client.check_scopes(&input).is_err());
+    }
+
+    #[test]
+    fn client_check_restypes_ok() {
+        let input = ResponseTypes {
+            types: vec![ResponseType::Code],
+        };
+        let client = Client {
+            client_id: String::default(),
+            client_secret: String::default(),
+            scope: String::default(),
+            response_type: String::from("code"),
+            redirect_uri: String::default(),
+        };
+        assert!(client.check_restypes(&input).is_ok());
+    }
+
+    #[test]
+    fn client_check_restypes_ng() {
+        let input = ResponseTypes {
+            types: vec![ResponseType::Code],
+        };
+        let client = Client {
+            client_id: String::default(),
+            client_secret: String::default(),
+            scope: String::default(),
+            response_type: String::default(),
+            redirect_uri: String::default(),
+        };
+        assert!(client.check_restypes(&input).is_err());
+    }
 }

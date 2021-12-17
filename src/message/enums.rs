@@ -3,6 +3,7 @@ use std::{iter::FromIterator, str::FromStr};
 use anyhow::{anyhow, Result};
 use rocket::form::{self, DataField, Errors, FromFormField, ValueField};
 
+#[derive(PartialEq, Debug)]
 pub struct Scopes {
     pub scopes: Vec<Scope>,
 }
@@ -37,6 +38,7 @@ impl ToString for Scopes {
     }
 }
 
+#[derive(PartialEq, Debug)]
 pub enum Scope {
     OpenID,
     Profile,
@@ -72,8 +74,9 @@ impl ToString for Scope {
     }
 }
 
+#[derive(PartialEq, Debug)]
 pub struct ResponseTypes {
-    types: Vec<ResponseType>,
+    pub types: Vec<ResponseType>,
 }
 
 impl ToString for ResponseTypes {
@@ -106,6 +109,7 @@ impl FromIterator<ResponseType> for ResponseTypes {
     }
 }
 
+#[derive(PartialEq, Debug)]
 pub enum ResponseType {
     Code,
 }
@@ -129,6 +133,7 @@ impl FromStr for ResponseType {
     }
 }
 
+#[derive(PartialEq, Debug)]
 pub enum GrantType {
     AuthorizationCode,
 }
@@ -147,8 +152,12 @@ impl FromStr for GrantType {
 #[async_trait]
 impl<'r> FromFormField<'r> for GrantType {
     fn from_value(field: ValueField<'r>) -> form::Result<'r, Self> {
-        Self::from_str(field.value)
-            .map_err(|e| Errors::from(form::Error::validation(format!("invalid scope: {}", e))))
+        Self::from_str(field.value).map_err(|e| {
+            Errors::from(form::Error::validation(format!(
+                "invalid grant_type: {}",
+                e
+            )))
+        })
     }
 
     async fn from_data(field: DataField<'r, '_>) -> form::Result<'r, Self> {
@@ -156,107 +165,93 @@ impl<'r> FromFormField<'r> for GrantType {
             field
                 .request
                 .query_value::<&str>("grant_type")
-                .ok_or(Errors::from(form::Error::validation("invalid scope")))??,
+                .ok_or(Errors::from(form::Error::validation("invalid grant_type")))??,
         )
-        .map_err(|e| Errors::from(form::Error::validation(format!("invalid scope: {}", e))))
+        .map_err(|e| {
+            Errors::from(form::Error::validation(format!(
+                "invalid grant_type: {}",
+                e
+            )))
+        })
     }
-}
-
-pub fn validate_scope(scope: &str) -> Result<()> {
-    let mut openid_found = false;
-    for s in scope.split_whitespace() {
-        match Scope::from_str(s) {
-            Ok(s) => {
-                if matches!(s, Scope::OpenID) {
-                    openid_found = true;
-                }
-            }
-            Err(e) => {
-                return Err(e);
-            }
-        }
-    }
-    if !openid_found {
-        return Err(anyhow!("scope openid is required"));
-    }
-    Ok(())
-}
-
-pub fn validate_response_type(response_type: &str) -> Result<()> {
-    for s in response_type.split_whitespace() {
-        ResponseType::from_str(s)?;
-    }
-    Ok(())
-}
-
-fn validate_grant_type(grant_type: &str) -> Result<()> {
-    for s in grant_type.split_whitespace() {
-        GrantType::from_str(s)?;
-    }
-    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::internal::token::TokenRequest;
-
     use super::*;
 
     #[test]
-    fn validate_scope_ok() {
-        let result = validate_scope("profile openid  phone");
-        assert!(result.is_ok());
+    fn scopes_from_str_ok() {
+        let result = Scopes::from_str("openid profile address phone email");
+        let expected = Scopes {
+            scopes: vec![
+                Scope::OpenID,
+                Scope::Profile,
+                Scope::Address,
+                Scope::Phone,
+                Scope::Email,
+            ],
+        };
+        assert_eq!(expected, result.unwrap());
     }
 
     #[test]
-    fn validate_scope_err_openid_notfound() {
-        let result = validate_scope("profile address");
-        let expected: Result<()> = Err(anyhow!("scope openid is required"));
-        assert_eq!(
-            expected.err().unwrap().to_string(),
-            result.err().unwrap().to_string()
-        );
+    fn scopes_from_str_ng() {
+        let result = Scopes::from_str("openid profile phone hogehoge");
+        assert!(result.is_err());
     }
 
     #[test]
-    fn validate_scope_err_unsupported_scope() {
-        let result = validate_scope("openid wrongscope");
-        let expected: Result<()> = Err(anyhow!("Unsupported scope"));
-        assert_eq!(
-            expected.err().unwrap().to_string(),
-            result.err().unwrap().to_string()
-        );
+    fn scopes_to_str_ok() {
+        let input = Scopes {
+            scopes: vec![
+                Scope::OpenID,
+                Scope::Profile,
+                Scope::Address,
+                Scope::Phone,
+                Scope::Email,
+            ],
+        };
+        let result = input.to_string();
+        let expected = String::from("openid profile address phone email");
+        assert_eq!(expected, result);
     }
 
     #[test]
-    fn validate_response_type_ok() {
-        let result = validate_response_type("code");
-        assert!(result.is_ok());
+    fn response_type_from_str_ok() {
+        let result = ResponseTypes::from_str("code");
+        let expected = ResponseTypes {
+            types: vec![ResponseType::Code],
+        };
+        assert_eq!(expected, result.unwrap());
     }
 
     #[test]
-    fn validate_response_type_err_unsupported_type() {
-        let result = validate_response_type("code hoge");
-        let expected: Result<()> = Err(anyhow!("Unsupported response_type"));
-        assert_eq!(
-            expected.err().unwrap().to_string(),
-            result.err().unwrap().to_string()
-        );
+    fn response_type_from_str_ng() {
+        let result = ResponseTypes::from_str("aaaaa");
+        assert!(result.is_err());
     }
 
     #[test]
-    fn validate_grant_type_ok() {
-        let result = validate_grant_type("authorization_code");
-        assert!(result.is_ok());
+    fn response_type_to_str_ok() {
+        let input = ResponseTypes {
+            types: vec![ResponseType::Code],
+        };
+        let result = input.to_string();
+        let expected = String::from("code");
+        assert_eq!(expected, result);
     }
 
     #[test]
-    fn validate_grant_type_err_unsupported_type() {
-        let result = validate_grant_type("authorization_code invalid_grant_type");
-        let expected: Result<TokenRequest> = Err(anyhow!("Unsupported grant_type"));
-        assert_eq!(
-            expected.err().unwrap().to_string(),
-            result.err().unwrap().to_string()
-        );
+    fn grant_type_from_str_ok() {
+        let result = GrantType::from_str("authorization_code");
+        let expected = GrantType::AuthorizationCode;
+        assert_eq!(expected, result.unwrap());
+    }
+
+    #[test]
+    fn grant_type_from_str_ng() {
+        let result = GrantType::from_str("aaaaa");
+        assert!(result.is_err());
     }
 }

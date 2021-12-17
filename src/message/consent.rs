@@ -6,21 +6,6 @@ use rocket::{
     Request,
 };
 
-#[derive(FromForm)]
-pub struct ClientParams {
-    pub scope: String,
-    pub response_type: String,
-    pub redirect_uri: String,
-}
-
-#[derive(FromForm)]
-pub struct LoginParams {
-    pub username: String,
-    pub password: String,
-    pub login_challenge: String,
-    pub state: Option<String>,
-}
-
 #[derive(FromForm, Debug)]
 pub struct ConsentGetParams {
     pub consent_challenge: String,
