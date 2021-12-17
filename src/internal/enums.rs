@@ -43,7 +43,6 @@ pub enum Scope {
     Address,
     Phone,
     Email,
-    All,
 }
 
 impl FromStr for Scope {
@@ -56,7 +55,6 @@ impl FromStr for Scope {
             "address" => Ok(Scope::Address),
             "phone" => Ok(Scope::Phone),
             "email" => Ok(Scope::Email),
-            "all" => Ok(Scope::All),
             _ => Err(anyhow!("Unsupported scope")),
         }
     }
@@ -70,7 +68,6 @@ impl ToString for Scope {
             Scope::Address => String::from("address"),
             Scope::Phone => String::from("phone"),
             Scope::Email => String::from("email"),
-            Scope::All => String::from("all"),
         }
     }
 }

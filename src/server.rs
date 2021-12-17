@@ -17,11 +17,12 @@ use crate::{
     error::CustomError,
     internal::{
         authentication::{
-            AuthenticationRequest, AuthenticationRequestParam, SuccessfulAuthenticationResponse,
+            AuthenticationRequest, AuthenticationRequestParam, AuthorizationError,
+            ErrorAuthenticationResponse, SuccessfulAuthenticationResponse,
         },
         enums::{Scope, Scopes},
         token::{Basic, IdToken, SuccessfulTokenResponse, TokenRequest},
-        userinfo::{SuccessfulUserinfoResponse, UserinfoRequest},
+        userinfo::{Address, SuccessfulUserinfoResponse, UserinfoRequest},
     },
     models::{AuthChallenge, AuthCode, Client, NewToken, Session},
     repository::{
@@ -83,7 +84,8 @@ async fn get_authenticate(
     conn: DBPool,
 ) -> Result<Template, CustomError> {
     conn.run(move |c| {
-        let client = repository::find_client(&authparam.client_id(), c)?;
+        let client =
+            repository::find_client(&authparam.clone().client_id.unwrap_or("".to_string()), c)?;
         let authparam = AuthenticationRequest::from(authparam, &client)?;
         let state = authparam.state().clone();
         let challenge = generate_challenge();
@@ -302,34 +304,42 @@ async fn get_userinfo(
         let token = repository::find_token(&inforeq.bearer, c)?;
         if token.is_valid() && token.access_token == inforeq.bearer {
             let scopes = Scopes::from_str(&token.scope).unwrap();
+            let default_address = Address {
+                formatted: "".to_string(),
+                street_address: "".to_string(),
+                locality: "".to_string(),
+                region: "".to_string(),
+                postal_code: "".to_string(),
+                country: "".to_string(),
+            };
             let mut res = SuccessfulUserinfoResponse {
                 sub: "userid".to_string(),
                 name: "tarou tanaka".to_string(),
-                email: None,
-                email_verified: None,
-                address: None,
-                phone_number: None,
-                phone_number_verified: None,
+                email: "".to_string(),
+                email_verified: false,
+                address: default_address,
+                phone_number: "".to_string(),
+                phone_number_verified: false,
             };
             for s in scopes.scopes.iter() {
                 match s {
-                    &Scope::All => {
-                        res.email = Some(String::from("test@example.com"));
-                        res.email_verified = Some(true);
-                        res.address = Some(String::from("address"));
-                        res.phone_number = Some(String::from("111-1234-5678"));
-                        res.phone_number_verified = Some(true);
-                    }
                     &Scope::Phone => {
-                        res.phone_number = Some(String::from("111-1234-5678"));
-                        res.phone_number_verified = Some(true);
+                        res.phone_number = String::from("111-1234-5678");
+                        res.phone_number_verified = true;
                     }
                     &Scope::Email => {
-                        res.email = Some(String::from("test@example.com"));
-                        res.email_verified = Some(true);
+                        res.email = String::from("test@example.com");
+                        res.email_verified = true;
                     }
                     &Scope::Address => {
-                        res.address = Some(String::from("address"));
+                        res.address = Address {
+                            formatted: "formatted address".to_string(),
+                            street_address: "street address".to_string(),
+                            locality: "locality".to_string(),
+                            region: "region".to_string(),
+                            postal_code: "postal code".to_string(),
+                            country: "country".to_string(),
+                        };
                     }
                     _ => {}
                 }

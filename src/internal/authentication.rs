@@ -66,20 +66,20 @@ impl AuthenticationRequest {
         nonce: &Option<String>,
     ) -> Result<Self, CustomError> {
         Ok(Self {
-            scope: Scopes::from_str(scope).map_err(|_e| {
-                CustomError::AuthenticationError(ErrorAuthenticationResponse::new(
+            scope: Scopes::from_str(scope).or(Err(CustomError::AuthenticationError(
+                ErrorAuthenticationResponse::new(
                     redirect_uri,
                     AuthorizationError::InvalidScope,
                     state,
-                ))
-            })?,
-            response_type: ResponseTypes::from_str(response_type).map_err(|_e| {
+                ),
+            )))?,
+            response_type: ResponseTypes::from_str(response_type).or(Err(
                 CustomError::AuthenticationError(ErrorAuthenticationResponse::new(
                     redirect_uri,
                     AuthorizationError::UnsupportedResponseType,
                     state,
-                ))
-            })?,
+                )),
+            ))?,
             client_id: client_id.to_string(),
             redirect_uri: redirect_uri.to_string(),
             state: state.to_owned(),
@@ -90,40 +90,62 @@ impl AuthenticationRequest {
     pub fn from(param: AuthenticationRequestParam, _client: &Client) -> Result<Self, CustomError> {
         // TODO: validation
         // TODO: validate with client
-        let scope = Scopes::from_str(&param.scope).map_err(|_e| {
-            CustomError::AuthenticationError(ErrorAuthenticationResponse::new(
-                "hoge",
+        let redirect_uri = param.redirect_uri.unwrap_or("".to_string());
+        let param_scope = param.scope.ok_or(CustomError::AuthenticationError(
+            ErrorAuthenticationResponse::new(
+                &redirect_uri,
+                AuthorizationError::InvalidRequest,
+                &param.state,
+            ),
+        ))?;
+        let scope = Scopes::from_str(&param_scope).or(Err(CustomError::AuthenticationError(
+            ErrorAuthenticationResponse::new(
+                &redirect_uri,
                 AuthorizationError::InvalidScope,
                 &param.state,
-            ))
-        })?;
-        let response_type = ResponseTypes::from_str(&param.response_type).map_err(|_e| {
+            ),
+        )))?;
+        let param_res_type = param.response_type.ok_or(CustomError::AuthenticationError(
+            ErrorAuthenticationResponse::new(
+                &redirect_uri,
+                AuthorizationError::InvalidRequest,
+                &param.state,
+            ),
+        ))?;
+        let response_type = ResponseTypes::from_str(&param_res_type).or(Err(
             CustomError::AuthenticationError(ErrorAuthenticationResponse::new(
                 "hoge",
                 AuthorizationError::UnsupportedResponseType,
                 &param.state,
-            ))
-        })?;
+            )),
+        ))?;
+        let param_client_id = param.client_id.ok_or(CustomError::AuthenticationError(
+            ErrorAuthenticationResponse::new(
+                &redirect_uri,
+                AuthorizationError::InvalidRequest,
+                &param.state,
+            ),
+        ))?;
 
         Ok(AuthenticationRequest {
             scope,
             response_type,
-            client_id: param.client_id.to_string(),
-            redirect_uri: param.redirect_uri.to_string(),
+            client_id: param_client_id,
+            redirect_uri,
             state: param.state.map(|s| s.to_string()),
             nonce: param.nonce.map(|s| s.to_string()),
         })
     }
 }
 
-#[derive(FromForm)]
+#[derive(FromForm, Clone)]
 pub struct AuthenticationRequestParam {
-    scope: String,
-    response_type: String,
-    client_id: String,
-    redirect_uri: String,
-    state: Option<String>,
-    nonce: Option<String>,
+    pub scope: Option<String>,
+    pub response_type: Option<String>,
+    pub client_id: Option<String>,
+    pub redirect_uri: Option<String>,
+    pub state: Option<String>,
+    pub nonce: Option<String>,
     // display: String,
     // prompt: String,
     // max_age: u64,
@@ -133,12 +155,6 @@ pub struct AuthenticationRequestParam {
     // acr_values: String,
     // Claims https://openid.net/specs/openid-connect-core-1_0.html#ClaimsParameter
     // claims: Claims,
-}
-
-impl AuthenticationRequestParam {
-    pub fn client_id(&self) -> &str {
-        &self.client_id
-    }
 }
 
 /// SuccessfulAuthenticationResponse represents a successful authentication response

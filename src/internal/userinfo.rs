@@ -39,14 +39,24 @@ impl<'r> FromRequest<'r> for UserinfoRequest {
 }
 
 #[derive(Serialize)]
+pub struct Address {
+    pub formatted: String,
+    pub street_address: String,
+    pub locality: String,
+    pub region: String,
+    pub postal_code: String,
+    pub country: String,
+}
+
+#[derive(Serialize)]
 pub struct SuccessfulUserinfoResponse {
     pub sub: String,
     pub name: String, // sample data
-    pub email: Option<String>,
-    pub email_verified: Option<bool>,
-    pub address: Option<String>,
-    pub phone_number: Option<String>,
-    pub phone_number_verified: Option<bool>,
+    pub email: String,
+    pub email_verified: bool,
+    pub address: Address,
+    pub phone_number: String,
+    pub phone_number_verified: bool,
 }
 
 #[derive(Serialize)]
